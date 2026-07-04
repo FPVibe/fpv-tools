@@ -4,7 +4,13 @@
 //
 // Bump CACHE_NAME whenever the precache list below changes so clients
 // pick up the new set instead of serving a stale mix.
-const CACHE_NAME = "fpv-tools-v1";
+const CACHE_PREFIX = "fpv-tools-";
+const CACHE_NAME = `${CACHE_PREFIX}v1`;
+
+// Cross-origin hosts we deliberately cache for offline use (e.g. the IGOW
+// tool loads sql.js from here). Anything else cross-origin is passed
+// straight through to the network, uncached.
+const TRUSTED_CROSS_ORIGIN_HOSTS = new Set(["cdnjs.cloudflare.com"]);
 
 // App shell: kept as an explicit list (no build step to auto-discover
 // files). Add new tool pages/assets here when they're created.
@@ -49,7 +55,11 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
       .then((keys) =>
-        Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+            .map((key) => caches.delete(key)),
+        )
       )
       .then(() => self.clients.claim()),
   );
@@ -57,6 +67,10 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+
+  const url = new URL(event.request.url);
+  const isSameOrigin = url.origin === self.location.origin;
+  if (!isSameOrigin && !TRUSTED_CROSS_ORIGIN_HOSTS.has(url.hostname)) return;
 
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {

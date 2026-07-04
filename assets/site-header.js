@@ -52,13 +52,29 @@ class FpvHeader extends HTMLElement {
     const isHome = this.hasAttribute("home");
 
     this.setAttribute("role", "banner");
-    this.innerHTML = `
-      ${isHome ? "" : `<a class="back-link" href="${root}">← FPV Tools</a>`}
-      <div>
-        <h1>${icon ? `${icon} ` : ""}${heading}</h1>
-        ${subtitle ? `<p>${subtitle}</p>` : ""}
-      </div>
-    `;
+    this.replaceChildren();
+
+    if (!isHome) {
+      const backLink = document.createElement("a");
+      backLink.className = "back-link";
+      backLink.href = root;
+      backLink.textContent = "← FPV Tools";
+      this.appendChild(backLink);
+    }
+
+    const info = document.createElement("div");
+
+    const h1 = document.createElement("h1");
+    h1.textContent = icon ? `${icon} ${heading}` : heading;
+    info.appendChild(h1);
+
+    if (subtitle) {
+      const p = document.createElement("p");
+      p.textContent = subtitle;
+      info.appendChild(p);
+    }
+
+    this.appendChild(info);
 
     setupPwa(root);
   }

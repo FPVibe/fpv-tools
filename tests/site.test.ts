@@ -42,7 +42,11 @@ for (const page of PAGES) {
 
   Deno.test(`${page.path} - back-to-home behavior matches page role`, async () => {
     const html = await readText(page.path);
-    const isHome = /<fpv-header[^>]*\bhome\b/.test(html);
+    const tag = html.match(/<fpv-header\b[^>]*>/)?.[0] ?? "";
+    // Strip quoted attribute values first so "home" appearing inside e.g.
+    // heading="Welcome home" isn't mistaken for the boolean `home` attribute.
+    const tagWithoutValues = tag.replace(/"[^"]*"/g, "");
+    const isHome = /\bhome\b/.test(tagWithoutValues);
     assertEquals(isHome, page.home);
   });
 }

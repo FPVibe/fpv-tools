@@ -4,7 +4,7 @@
   "description": "Browser-based utilities for Betaflight and FPV flying",
   "start_url": ".",
   "scope": ".",
-  "id": "/",
+  "id": ".",
   "display": "standalone",
   "background_color": "#0d1117",
   "theme_color": "#0d1117",
