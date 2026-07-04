@@ -56,13 +56,16 @@ save`;
 function buildContext(a, b) {
   const secA = parseCLI(a);
   const secB = parseCLI(b);
-  return { sections: compareSections(secA, secB), versionA: extractVersion(a), versionB: extractVersion(b) };
+  return {
+    sections: compareSections(secA, secB),
+    versionA: extractVersion(a),
+    versionB: extractVersion(b),
+  };
 }
 
 Deno.test("validate - flags keys introduced only by B when target is A", () => {
   const ctx = buildContext(DUMP_A, DUMP_B_NEWER);
-  const merged =
-    `# master\nset gyro_lpf1_static_hz = 0\nset new_key_added_in_45 = 42\n\nsave`;
+  const merged = `# master\nset gyro_lpf1_static_hz = 0\nset new_key_added_in_45 = 42\n\nsave`;
   const findings = validate({ mergedText: merged, ...ctx });
   const keyDrift = findings.find((f) => f.category === "unknown-key");
   assertEquals(keyDrift !== undefined, true);
@@ -102,8 +105,7 @@ Deno.test("validate - missing version on A disables key-drift check and warns", 
 
 Deno.test("validate - flags duplicate set keys in the merged output", () => {
   const ctx = buildContext(DUMP_A, DUMP_A);
-  const merged =
-    `# master\nset gyro_lpf1_static_hz = 0\nset gyro_lpf1_static_hz = 5\n\nsave`;
+  const merged = `# master\nset gyro_lpf1_static_hz = 0\nset gyro_lpf1_static_hz = 5\n\nsave`;
   const findings = validate({ mergedText: merged, ...ctx });
   const dup = findings.find((f) => f.category === "duplicate-key");
   assertEquals(dup !== undefined, true);
