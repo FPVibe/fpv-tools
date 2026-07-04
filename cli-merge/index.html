@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Betaflight CLI Merge</title>
+<link rel="stylesheet" href="../assets/site-header.css">
 <style>
 :root {
   --bg:        #0d1117;
@@ -30,23 +31,6 @@ body {
   line-height: 1.5;
   min-height: 100vh;
 }
-
-/* ── Header ── */
-.site-header {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  padding: .75rem 1.5rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-.site-header h1 {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--orange);
-  letter-spacing: .02em;
-}
-.site-header p { color: var(--muted); font-size: .8rem; }
 
 /* ── Layout ── */
 .container { max-width: 1400px; margin: 0 auto; padding: 1.25rem 1.5rem; }
@@ -482,10 +466,8 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
 </head>
 <body>
 
-<header class="site-header">
-  <h1>⚡ BF CLI Merge</h1>
-  <p>Paste two Betaflight CLI dumps · pick sections · copy the result</p>
-</header>
+<fpv-header root="../" icon="⚡" heading="BF CLI Merge" subtitle="Paste two Betaflight CLI dumps · pick sections · copy the result"></fpv-header>
+<script type="module" src="../assets/site-header.js"></script>
 
 <div class="container">
 
