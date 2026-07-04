@@ -135,3 +135,13 @@ Deno.test("validate - accepts save on its own line as terminator", () => {
   const findings = validate({ mergedText: merged, ...ctx });
   assertEquals(findings.some((f) => f.category === "missing-save"), false);
 });
+
+Deno.test("validate - words starting with 'set' are not treated as set commands", () => {
+  const ctx = buildContext(DUMP_A, DUMP_A);
+  // settings, setpoint, setup are not the `set` command; they must not
+  // produce malformed-set findings.
+  const merged =
+    `# master\nsettings blah\nsetpoint = 5\nsetup something\nset gyro_lpf1_static_hz = 0\nsave`;
+  const findings = validate({ mergedText: merged, ...ctx });
+  assertEquals(findings.some((f) => f.category === "malformed-set"), false);
+});

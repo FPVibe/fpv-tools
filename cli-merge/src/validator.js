@@ -32,6 +32,28 @@ function collectSetKeys(sections) {
 }
 
 /**
+ * Memoize the A/B key sets per `sections` array instance. `sections` is a
+ * fresh array on every Compare, so caching by reference is sufficient to
+ * avoid re-parsing every finding refresh (which fires on each selection
+ * toggle) without needing manual invalidation.
+ * @type {WeakMap<object, {keysA: Set<string>, keysB: Set<string>}>}
+ */
+const keyCache = new WeakMap();
+
+function keySetsFor(sections) {
+  if (!sections || sections.length === 0) {
+    return { keysA: new Set(), keysB: new Set() };
+  }
+  const cached = keyCache.get(sections);
+  if (cached) return cached;
+  const secA = sections.map((s) => ({ lines: s.linesA ?? [] }));
+  const secB = sections.map((s) => ({ lines: s.linesB ?? [] }));
+  const entry = { keysA: collectSetKeys(secA), keysB: collectSetKeys(secB) };
+  keyCache.set(sections, entry);
+  return entry;
+}
+
+/**
  * Validate a merged CLI output against the two source dumps.
  *
  * Convention: CLI A is the *base* (its firmware version is treated as the
@@ -68,18 +90,16 @@ export function validate({ mergedText, sections = [], versionA, versionB }) {
     });
   }
 
-  // Build key sets per side from the parsed sections.
-  const secA = sections.map((s) => ({ lines: s.linesA ?? [] }));
-  const secB = sections.map((s) => ({ lines: s.linesB ?? [] }));
-  const keysA = collectSetKeys(secA);
-  const keysB = collectSetKeys(secB);
+  const { keysA, keysB } = keySetsFor(sections);
 
   const lines = mergedText.split("\n");
   const seenKeys = new Map(); // key -> first line index
 
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trim();
-    if (!trimmed.startsWith("set")) continue;
+    // Match only the `set` command itself — `set<whitespace>...` — so words
+    // like `settings`, `setpoint`, `setup` don't fall into malformed-set.
+    if (!/^set\s/.test(trimmed)) continue;
 
     // Malformed: missing "=" or empty value.
     const setMatch = /^set\s+(\S+)\s*=\s*(.*)$/.exec(trimmed);
