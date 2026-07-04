@@ -79,6 +79,125 @@ body {
 .input-actions { display: flex; align-items: center; gap: .4rem; }
 .file-input { display: none; }
 
+.input-hint {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: .72rem;
+  margin-left: .25rem;
+}
+
+/* ── Detected-version pills ── */
+.version-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.version-pills:empty { display: none; }
+
+.version-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .18rem .55rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: .72rem;
+  font-family: "SF Mono", "Fira Code", monospace;
+  color: var(--text-dim);
+  background: var(--card);
+}
+.version-pill.pill-a { border-color: rgba(88,166,255,.4); color: var(--a); }
+.version-pill.pill-b { border-color: rgba(63,185,80,.4); color: var(--b); }
+.version-pill.pill-mismatch {
+  border-color: rgba(224,123,57,.6);
+  color: var(--orange);
+  background: rgba(224,123,57,.08);
+}
+
+/* ── Findings panel ── */
+.findings-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 6px;
+  padding: .55rem .85rem;
+  margin-bottom: .9rem;
+  font-size: .78rem;
+}
+.findings-panel.sev-error   { border-left-color: var(--orange); }
+.findings-panel.sev-warning { border-left-color: #d29922; }
+.findings-panel.sev-info    { border-left-color: var(--a); }
+
+.findings-summary {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  color: var(--text);
+  list-style: none;
+}
+.findings-summary::-webkit-details-marker { display: none; }
+.findings-summary::before {
+  content: "▸";
+  color: var(--muted);
+  font-size: .65rem;
+  transition: transform .12s;
+  display: inline-block;
+}
+.findings-panel[open] .findings-summary::before { transform: rotate(90deg); }
+
+.findings-count {
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: .68rem;
+  padding: .1rem .45rem;
+  border-radius: 10px;
+  background: rgba(255,255,255,.05);
+  color: var(--text-dim);
+}
+.findings-count.count-error   { background: rgba(224,123,57,.15); color: var(--orange); }
+.findings-count.count-warning { background: rgba(210,153,34,.15); color: #d29922; }
+.findings-count.count-info    { background: rgba(88,166,255,.15); color: var(--a); }
+
+.findings-list {
+  list-style: none;
+  margin-top: .5rem;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+}
+.finding {
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  padding: .3rem .1rem;
+  border-top: 1px solid rgba(48,54,61,.5);
+  line-height: 1.4;
+}
+.finding:first-child { border-top: none; }
+.finding-sev {
+  font-size: .62rem;
+  font-weight: 700;
+  padding: .08rem .4rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  flex-shrink: 0;
+}
+.finding-sev.error   { background: rgba(224,123,57,.18); color: var(--orange); }
+.finding-sev.warning { background: rgba(210,153,34,.18); color: #d29922; }
+.finding-sev.info    { background: rgba(88,166,255,.18); color: var(--a); }
+.finding-line {
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: .66rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.finding-msg { color: var(--text); }
+
 .drop-zone { position: relative; }
 .drop-zone textarea { width: 100%; }
 
@@ -374,7 +493,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
   <div class="input-grid">
     <div>
       <div class="input-row">
-        <div class="input-label"><span class="dot dot-a"></span>CLI A (base)</div>
+        <div class="input-label"><span class="dot dot-a"></span>CLI A · base <span class="input-hint">the config you'll save</span></div>
         <div class="input-actions">
           <button type="button" class="btn btn-ghost btn-sm" data-load-file="cli-a">📁 Load file</button>
           <input type="file" class="file-input" data-target="cli-a" accept=".txt,.cli,.config,.log,text/plain">
@@ -387,7 +506,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
     </div>
     <div>
       <div class="input-row">
-        <div class="input-label"><span class="dot dot-b"></span>CLI B (source)</div>
+        <div class="input-label"><span class="dot dot-b"></span>CLI B · import <span class="input-hint">settings to merge in</span></div>
         <div class="input-actions">
           <button type="button" class="btn btn-ghost btn-sm" data-load-file="cli-b">📁 Load file</button>
           <input type="file" class="file-input" data-target="cli-b" accept=".txt,.cli,.config,.log,text/plain">
@@ -404,6 +523,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
     <button class="btn" id="compare-btn">Compare</button>
     <button class="btn btn-ghost" id="clear-btn">Clear</button>
     <span class="status-text" id="parse-status"></span>
+    <span class="version-pills" id="version-pills"></span>
   </div>
 
   <!-- ── Step 2: Section picker (hidden until parsed) ── -->
@@ -425,6 +545,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
 
     <!-- ── Step 3: Output ── -->
     <hr>
+    <div id="findings-panel" class="findings-panel" hidden></div>
     <div class="out-head row-between">
       <div>
         <h2 style="font-size:.9rem;color:var(--text-dim)">Output</h2>
@@ -450,6 +571,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
 <script type="module">
 import { parseCLI, compareSections } from "./src/parser.js";
 import { parseSetCommands, buildOutput } from "./src/output.js";
+import { extractVersion, validate } from "./src/validator.js";
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -460,6 +582,10 @@ const state = {
   selections: {},
   /** @type {Record<string,'a'|'b'>} */
   setSelections: {},
+  /** @type {string|null} */
+  versionA: null,
+  /** @type {string|null} */
+  versionB: null,
 };
 
 // ── Defaults ───────────────────────────────────────────────────────────────
@@ -677,6 +803,63 @@ window.selectAll = function (val) {
 function refreshOutput() {
   const out = buildOutput(state.sections, state.selections, state.setSelections);
   document.getElementById("output-area").value = out;
+  refreshFindings(out);
+}
+
+function refreshFindings(mergedText) {
+  const panel = document.getElementById("findings-panel");
+  const findings = validate({
+    mergedText,
+    sections: state.sections,
+    versionA: state.versionA,
+    versionB: state.versionB,
+  });
+
+  if (!findings.length) {
+    panel.hidden = true;
+    panel.innerHTML = "";
+    return;
+  }
+  panel.hidden = false;
+
+  const counts = { error: 0, warning: 0, info: 0 };
+  for (const f of findings) counts[f.severity] = (counts[f.severity] ?? 0) + 1;
+  const topSev = counts.error ? "error" : counts.warning ? "warning" : "info";
+  panel.className = `findings-panel sev-${topSev}`;
+
+  const countPills = ["error", "warning", "info"]
+    .filter((s) => counts[s])
+    .map((s) => `<span class="findings-count count-${s}">${counts[s]} ${s}${counts[s] === 1 ? "" : "s"}</span>`)
+    .join("");
+
+  const items = findings.map((f) => `
+    <li class="finding">
+      <span class="finding-sev ${f.severity}">${f.severity}</span>
+      ${f.line ? `<span class="finding-line">L${f.line}</span>` : ""}
+      <span class="finding-msg">${escHtml(f.message)}</span>
+    </li>
+  `).join("");
+
+  panel.innerHTML = `
+    <details ${counts.error ? "open" : ""}>
+      <summary class="findings-summary">
+        Issues in merged output ${countPills}
+      </summary>
+      <ul class="findings-list">${items}</ul>
+    </details>
+  `;
+}
+
+function renderVersionPills() {
+  const pills = document.getElementById("version-pills");
+  const { versionA, versionB } = state;
+  const parts = [];
+  if (versionA) parts.push(`<span class="version-pill pill-a">A · ${escHtml(versionA)}</span>`);
+  if (versionB) parts.push(`<span class="version-pill pill-b">B · ${escHtml(versionB)}</span>`);
+  if (versionA && versionB && versionA !== versionB) {
+    parts.push(`<span class="version-pill pill-mismatch" title="A is the validation target">version mismatch</span>`);
+  }
+  pills.innerHTML = parts.join("");
 }
 
 // ── File loading (picker + drag-and-drop) ──────────────────────────────────
@@ -743,6 +926,9 @@ document.getElementById("compare-btn").addEventListener("click", () => {
   state.sections   = compareSections(secA, secB);
   state.selections  = {};
   state.setSelections = {};
+  state.versionA = extractVersion(textA);
+  state.versionB = extractVersion(textB);
+  renderVersionPills();
 
   // Apply defaults
   for (const sec of state.sections) {
@@ -769,6 +955,9 @@ document.getElementById("clear-btn").addEventListener("click", () => {
   state.sections = [];
   state.selections = {};
   state.setSelections = {};
+  state.versionA = null;
+  state.versionB = null;
+  renderVersionPills();
 });
 
 document.getElementById("copy-btn").addEventListener("click", () => {
