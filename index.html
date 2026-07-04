@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FPV Tools</title>
+<link rel="stylesheet" href="./assets/site-header.css">
 <style>
 :root {
   --bg:      #0d1117;
@@ -25,14 +26,6 @@ body {
   display: flex;
   flex-direction: column;
 }
-
-header {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  padding: .75rem 1.5rem;
-}
-header h1 { font-size: 1rem; font-weight: 700; color: var(--orange); }
-header p  { font-size: .8rem; color: var(--muted); margin-top: .15rem; }
 
 main {
   max-width: 640px;
@@ -82,10 +75,8 @@ footer {
 </head>
 <body>
 
-<header>
-  <h1>⚡ FPV Tools</h1>
-  <p>Browser-based utilities for Betaflight and FPV flying</p>
-</header>
+<fpv-header root="./" icon="⚡" heading="FPV Tools" subtitle="Browser-based utilities for Betaflight and FPV flying" home></fpv-header>
+<script type="module" src="./assets/site-header.js"></script>
 
 <main>
   <h2>Tools</h2>

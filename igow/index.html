@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IGOW Challenge Reference</title>
+<link rel="stylesheet" href="../assets/site-header.css">
 <style>
 :root {
   --bg:      #0d1117;
@@ -30,28 +31,6 @@ body {
   display: flex;
   flex-direction: column;
 }
-
-header {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  padding: .75rem 1.5rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-header h1 { font-size: 1rem; font-weight: 700; color: var(--orange); white-space: nowrap; }
-header p  { font-size: .8rem; color: var(--muted); margin-top: .15rem; }
-
-.back-link {
-  font-size: .8rem;
-  color: var(--muted);
-  text-decoration: none;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: .3rem .6rem;
-  transition: border-color .15s, color .15s;
-}
-.back-link:hover { border-color: var(--orange); color: var(--orange); }
 
 main {
   max-width: 1100px;
@@ -244,13 +223,8 @@ footer {
 </head>
 <body>
 
-<header>
-  <a class="back-link" href="../">← FPV Tools</a>
-  <div>
-    <h1>🏆 IGOW Challenge Reference</h1>
-    <p>International Game of WHOOP — all challenges IGOW1–6 with trick components</p>
-  </div>
-</header>
+<fpv-header root="../" icon="🏆" heading="IGOW Challenge Reference" subtitle="International Game of WHOOP — all challenges IGOW1–6 with trick components"></fpv-header>
+<script type="module" src="../assets/site-header.js"></script>
 
 <main>
   <div class="tabs">
