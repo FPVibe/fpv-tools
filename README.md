@@ -12,7 +12,7 @@ Compare two Betaflight CLI dumps side-by-side and generate a merged output. Usef
 - Comparing tune changes across revisions
 - Extracting specific sections from full dumps
 
-Inputs accept pasted text, a file picker, or drag-and-drop from your desktop.
+Inputs accept pasted text, a file picker, or drag-and-drop from your desktop. The tool follows an **A = base / B = import** convention, detects the Betaflight version in each dump's header, and validates the merged output (unknown keys, duplicates, malformed lines, missing `save`) using A's firmware version as the target.
 
 ### 📈 Rate Profile Comparison
 **Path:** `./rate-profile/`
