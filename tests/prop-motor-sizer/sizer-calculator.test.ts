@@ -232,7 +232,9 @@ Deno.test("analyze - full 5-inch 6S freestyle build produces sane metrics", () =
   assert(metrics.twr > 7 && metrics.twr < 12, `twr ${metrics.twr}`);
   assert(metrics.hoverThrottlePct > 25 && metrics.hoverThrottlePct < 40);
   assert(metrics.tipMach > 0.5 && metrics.tipMach < 0.8);
-  assert(metrics.maxCurrentA > 15 && metrics.maxCurrentA < 45);
+  // Per-motor max draw ~25-35A and total ~80-140A are typical for this class
+  assert(metrics.maxCurrentPerMotorA > 15 && metrics.maxCurrentPerMotorA < 45);
+  assert(metrics.maxCurrentA > 60 && metrics.maxCurrentA < 180);
   // Everything was specified, so nothing to recommend
   assertEquals(Object.keys(recommendations).length, 0);
   assert(verdicts.length > 0);
