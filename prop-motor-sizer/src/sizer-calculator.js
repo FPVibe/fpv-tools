@@ -14,7 +14,9 @@ export const AIR_DENSITY = 1.225; // kg/m³, sea level
 export const SPEED_OF_SOUND = 343; // m/s
 export const IN_TO_M = 0.0254;
 export const CELL_VOLTAGE_FULL = 4.2;
+export const CELL_VOLTAGE_NOMINAL = 3.7;
 export const DEFAULT_LOAD_FACTOR = 0.75;
+export const USABLE_BATTERY_FRACTION = 0.8;
 
 const GRAMS_PER_NEWTON = 1000 / 9.81;
 
@@ -145,6 +147,15 @@ export function loadedRpm(kv, voltage, loadFactor = DEFAULT_LOAD_FACTOR) {
   return kv * voltage * loadFactor;
 }
 
+/**
+ * Air density (kg/m³) at an altitude in meters, per the standard-atmosphere
+ * troposphere model. Missing or negative altitudes read as sea level.
+ */
+export function airDensityAtAltitude(altitudeM) {
+  const h = Math.min(11000, Math.max(0, altitudeM ?? 0));
+  return AIR_DENSITY * Math.pow(1 - 2.25577e-5 * h, 4.2561);
+}
+
 /** Prop tip speed in m/s at a given RPM. */
 export function tipSpeedMs(diameterIn, rpm) {
   return Math.PI * diameterIn * IN_TO_M * (rpm / 60);
@@ -176,13 +187,14 @@ function bladeFactor(blades) {
  * @param {number} pitchIn prop pitch, inches
  * @param {number} rpm shaft speed under load
  * @param {number} [blades]
+ * @param {number} [density] air density, kg/m³
  */
-export function staticThrustGrams(diameterIn, pitchIn, rpm, blades = 2) {
+export function staticThrustGrams(diameterIn, pitchIn, rpm, blades = 2, density = AIR_DENSITY) {
   const d = diameterIn * IN_TO_M;
   const discArea = (Math.PI * d * d) / 4;
   const exitVelocity = rpm * pitchIn * IN_TO_M / 60;
   const slipFactor = Math.pow(diameterIn / (3.29546 * pitchIn), 1.5);
-  const newtons = AIR_DENSITY * discArea * exitVelocity * exitVelocity * slipFactor;
+  const newtons = density * discArea * exitVelocity * exitVelocity * slipFactor;
   return newtons * bladeFactor(blades) * GRAMS_PER_NEWTON;
 }
 
@@ -212,11 +224,12 @@ export function electricalPowerWatts(
   diameterIn,
   figureOfMerit,
   driveEfficiency = 0.85,
+  density = AIR_DENSITY,
 ) {
   const thrustN = thrustGrams / GRAMS_PER_NEWTON;
   const d = diameterIn * IN_TO_M;
   const discArea = (Math.PI * d * d) / 4;
-  const idealWatts = Math.pow(thrustN, 1.5) / Math.sqrt(2 * AIR_DENSITY * discArea);
+  const idealWatts = Math.pow(thrustN, 1.5) / Math.sqrt(2 * density * discArea);
   return idealWatts / (figureOfMerit * driveEfficiency);
 }
 
@@ -321,10 +334,19 @@ function round1(n) {
  * Compute every metric, recommendation, and verdict the given (possibly
  * partial) inputs allow.
  *
+ * Advanced inputs (all optional): `loadFactor` overrides the 75% loaded-RPM
+ * assumption; `cellVoltage` sets the per-cell voltage metrics are computed at
+ * (recommendations always use `cellVoltageFull`, the community's full-charge
+ * KV convention); `altitudeM` derates air density; `capacityMah` (with
+ * `cellVoltageNominal` for energy) enables a hover-endurance estimate; and
+ * `measuredThrustG` rescales the thrust model to a bench-tested value.
+ *
  * @param {{
  *   diameterIn?: number, pitchIn?: number, blades?: number,
  *   motorSize?: string, kv?: number, cells?: number, auwGrams?: number,
- *   motorCount?: number, style?: string,
+ *   motorCount?: number, style?: string, loadFactor?: number,
+ *   cellVoltage?: number, cellVoltageFull?: number, cellVoltageNominal?: number,
+ *   altitudeM?: number, capacityMah?: number, measuredThrustG?: number,
  * }} inputs
  * @returns {{metrics: object, recommendations: object, verdicts: Array<{level: string, text: string}>}}
  */
@@ -337,22 +359,33 @@ export function analyze(inputs) {
     cells,
     auwGrams,
     motorCount = 4,
+    capacityMah,
+    measuredThrustG,
   } = inputs;
   const style = normalizeStyle(inputs.style);
   const stator = parseMotorSize(inputs.motorSize);
 
   const has = (n) => typeof n === "number" && Number.isFinite(n) && n > 0;
 
+  const loadFactor = has(inputs.loadFactor) ? inputs.loadFactor : DEFAULT_LOAD_FACTOR;
+  const cellVoltage = has(inputs.cellVoltage) ? inputs.cellVoltage : CELL_VOLTAGE_FULL;
+  const cellVoltageFull = has(inputs.cellVoltageFull) ? inputs.cellVoltageFull : CELL_VOLTAGE_FULL;
+  const cellVoltageNominal = has(inputs.cellVoltageNominal)
+    ? inputs.cellVoltageNominal
+    : CELL_VOLTAGE_NOMINAL;
+  const density = airDensityAtAltitude(inputs.altitudeM);
+
   const metrics = {};
   const recommendations = {};
   const verdicts = [];
 
   if (stator) metrics.statorVolumeMm3 = statorVolume(stator);
-  if (has(cells)) metrics.voltage = cells * CELL_VOLTAGE_FULL;
+  if (has(cells)) metrics.voltage = cells * cellVoltage;
+  if (has(inputs.altitudeM)) metrics.airDensity = density;
 
   if (has(kv) && has(cells)) {
     metrics.maxRpm = maxRpm(kv, metrics.voltage);
-    metrics.loadedRpm = loadedRpm(kv, metrics.voltage);
+    metrics.loadedRpm = loadedRpm(kv, metrics.voltage, loadFactor);
   }
 
   if (has(diameterIn) && has(metrics.loadedRpm)) {
@@ -366,9 +399,20 @@ export function analyze(inputs) {
   }
 
   if (has(diameterIn) && has(pitchIn) && has(metrics.loadedRpm)) {
-    metrics.thrustPerMotorG = staticThrustGrams(diameterIn, pitchIn, metrics.loadedRpm, blades);
+    metrics.thrustPerMotorG = staticThrustGrams(
+      diameterIn,
+      pitchIn,
+      metrics.loadedRpm,
+      blades,
+      density,
+    );
+    if (has(measuredThrustG)) {
+      metrics.calibrationFactor = measuredThrustG / metrics.thrustPerMotorG;
+      metrics.thrustPerMotorG = measuredThrustG;
+    }
     metrics.totalThrustG = metrics.thrustPerMotorG * motorCount;
-    metrics.maxPowerW = electricalPowerWatts(metrics.thrustPerMotorG, diameterIn, 0.55) *
+    metrics.maxPowerW =
+      electricalPowerWatts(metrics.thrustPerMotorG, diameterIn, 0.55, 0.85, density) *
       motorCount;
     metrics.maxCurrentA = metrics.maxPowerW / metrics.voltage;
     metrics.maxCurrentPerMotorA = metrics.maxCurrentA / motorCount;
@@ -382,9 +426,15 @@ export function analyze(inputs) {
   if (has(auwGrams) && has(diameterIn)) {
     metrics.discLoadingGCm2 = discLoading(auwGrams, diameterIn, motorCount);
     if (has(metrics.voltage)) {
-      metrics.hoverPowerW = electricalPowerWatts(auwGrams / motorCount, diameterIn, 0.65) *
+      metrics.hoverPowerW =
+        electricalPowerWatts(auwGrams / motorCount, diameterIn, 0.65, 0.85, density) *
         motorCount;
       metrics.hoverCurrentA = metrics.hoverPowerW / metrics.voltage;
+      if (has(capacityMah) && has(cells)) {
+        const energyWh = (capacityMah / 1000) * cells * cellVoltageNominal;
+        metrics.hoverFlightTimeMin = (energyWh * USABLE_BATTERY_FRACTION) /
+          metrics.hoverPowerW * 60;
+      }
     }
   }
 
@@ -392,7 +442,7 @@ export function analyze(inputs) {
 
   if (!has(kv) && has(diameterIn) && has(cells)) {
     recommendations.kv = {
-      ...recommendKv(diameterIn, metrics.voltage, style),
+      ...recommendKv(diameterIn, cells * cellVoltageFull, style),
       basis: `${diameterIn}″ prop at ${cells}S`,
     };
   }
@@ -545,8 +595,19 @@ export function analyze(inputs) {
     }
   }
 
+  if (has(metrics.calibrationFactor)) {
+    const factor = metrics.calibrationFactor;
+    const divergent = factor < 0.7 || factor > 1.4;
+    verdicts.push({
+      level: divergent ? "warn" : "info",
+      text: `Thrust model calibrated ×${factor.toFixed(2)} to your measured ${
+        Math.round(measuredThrustG)
+      }g/motor${divergent ? " — the model diverges a lot here, trust the bench numbers" : ""}.`,
+    });
+  }
+
   if (has(kv) && has(cells) && has(diameterIn)) {
-    const ideal = recommendKv(diameterIn, metrics.voltage, style).ideal;
+    const ideal = recommendKv(diameterIn, cells * cellVoltageFull, style).ideal;
     const ratio = kv / ideal;
     if (ratio > 1.25) {
       verdicts.push({
