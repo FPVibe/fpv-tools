@@ -37,7 +37,8 @@ Characterize an FPV powertrain from prop size, blade count, motor size, KV, batt
 - **Suggested ranges** — e.g. pick a 5″ prop on 6S and get a recommended KV band and a list of suitable stator sizes; enter a motor and get the prop diameters it suits
 - **Style-aware** — cinematic / long-range / freestyle / racing biases pitch, KV, and AUW recommendations
 - **Presets** — tiny whoop, 3″ 4S, 5″ 6S freestyle, 5″ 4S race, 7″ long-range starting points
-- Inputs persist in localStorage; estimates are simplified-physics ballparks (±20–30%), not thrust-stand data
+- **Advanced panel** — adjust the motor load factor, battery chemistry (LiPo/LiHV/Li-Ion) and voltage basis (full charge / nominal / under load), and altitude; add battery capacity for a hover-endurance estimate; or enter one thrust-stand measurement to calibrate the whole model to your bench numbers
+- Inputs persist in localStorage; estimates are simplified-physics ballparks (±20–30% unless calibrated), not thrust-stand data
 
 ## Getting Started
 
