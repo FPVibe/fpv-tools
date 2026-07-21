@@ -4,6 +4,8 @@ import {
   assertEquals,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
+  AIR_DENSITY,
+  airDensityAtAltitude,
   analyze,
   discLoading,
   hoverThrottlePercent,
@@ -277,4 +279,97 @@ Deno.test("analyze - empty input does not throw", () => {
   assertEquals(Object.keys(metrics).length, 0);
   assertEquals(Object.keys(recommendations).length, 0);
   assertEquals(verdicts.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Advanced mode - altitude / air density
+// ---------------------------------------------------------------------------
+
+Deno.test("airDensityAtAltitude - sea level matches the standard constant", () => {
+  assertAlmostEquals(airDensityAtAltitude(0), AIR_DENSITY, 1e-9);
+});
+
+Deno.test("airDensityAtAltitude - 2000m is about 18% thinner", () => {
+  assertAlmostEquals(airDensityAtAltitude(2000), 1.007, 0.01);
+});
+
+Deno.test("airDensityAtAltitude - negative or missing altitude clamps to sea level", () => {
+  assertAlmostEquals(airDensityAtAltitude(-100), AIR_DENSITY, 1e-9);
+  assertAlmostEquals(airDensityAtAltitude(undefined), AIR_DENSITY, 1e-9);
+});
+
+Deno.test("staticThrustGrams - thrust scales linearly with air density", () => {
+  const seaLevel = staticThrustGrams(5, 4.5, 30000, 3);
+  const thin = staticThrustGrams(5, 4.5, 30000, 3, 1.0);
+  assertAlmostEquals(thin / seaLevel, 1.0 / AIR_DENSITY, 1e-9);
+});
+
+Deno.test("analyze - altitude derates thrust", () => {
+  const seaLevel = analyze(FULL_5IN_6S).metrics;
+  const at2000 = analyze({ ...FULL_5IN_6S, altitudeM: 2000 }).metrics;
+  const ratio = at2000.totalThrustG / seaLevel.totalThrustG;
+  assert(ratio > 0.8 && ratio < 0.84, `ratio ${ratio}`);
+});
+
+// ---------------------------------------------------------------------------
+// Advanced mode - load factor and voltage basis
+// ---------------------------------------------------------------------------
+
+Deno.test("analyze - custom load factor moves loaded RPM", () => {
+  const { metrics } = analyze({ ...FULL_5IN_6S, loadFactor: 0.85 });
+  assertAlmostEquals(metrics.loadedRpm, 1800 * 25.2 * 0.85, 1e-6);
+});
+
+Deno.test("analyze - per-cell voltage changes metrics but not recommendations", () => {
+  // Metrics at nominal 3.7V/cell; KV recommendations stay on the full-charge
+  // convention so they match how the community quotes KV.
+  const { metrics, recommendations } = analyze({
+    diameterIn: 5,
+    cells: 6,
+    blades: 3,
+    motorCount: 4,
+    style: "freestyle",
+    cellVoltage: 3.7,
+  });
+  assertAlmostEquals(metrics.voltage, 22.2, 1e-9);
+  assert(
+    recommendations.kv.ideal > 1600 && recommendations.kv.ideal < 2000,
+    `ideal ${recommendations.kv.ideal}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Advanced mode - battery capacity and hover endurance
+// ---------------------------------------------------------------------------
+
+Deno.test("analyze - battery capacity yields a plausible hover endurance", () => {
+  const { metrics } = analyze({ ...FULL_5IN_6S, capacityMah: 1300 });
+  assert(
+    metrics.hoverFlightTimeMin > 8 && metrics.hoverFlightTimeMin < 25,
+    `endurance ${metrics.hoverFlightTimeMin}`,
+  );
+});
+
+Deno.test("analyze - no capacity means no endurance metric", () => {
+  assertEquals(analyze(FULL_5IN_6S).metrics.hoverFlightTimeMin, undefined);
+});
+
+// ---------------------------------------------------------------------------
+// Advanced mode - thrust-stand calibration
+// ---------------------------------------------------------------------------
+
+Deno.test("analyze - measured thrust calibrates the model", () => {
+  const { metrics } = analyze({ ...FULL_5IN_6S, measuredThrustG: 1650 });
+  assertAlmostEquals(metrics.thrustPerMotorG, 1650, 1e-9);
+  assertAlmostEquals(metrics.totalThrustG, 6600, 1e-9);
+  assertAlmostEquals(metrics.twr, 6600 / 650, 1e-9);
+  assert(
+    metrics.calibrationFactor > 1.0 && metrics.calibrationFactor < 1.2,
+    `factor ${metrics.calibrationFactor}`,
+  );
+});
+
+Deno.test("analyze - calibration adds an info verdict", () => {
+  const { verdicts } = analyze({ ...FULL_5IN_6S, measuredThrustG: 1650 });
+  assert(verdicts.some((v: { text: string }) => v.text.includes("alibrat")));
 });
