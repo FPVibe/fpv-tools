@@ -129,6 +129,33 @@ body {
   font-style: italic;
 }
 
+.advanced {
+  margin-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color);
+  padding-top: var(--spacing-sm);
+}
+
+.advanced summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-sm);
+  user-select: none;
+}
+
+.advanced summary:hover {
+  color: var(--orange);
+}
+
+.field input[type='range'] {
+  min-height: 40px;
+  padding: 0;
+  accent-color: var(--orange);
+  border: none;
+  background: transparent;
+}
+
 .actions {
   margin-top: var(--spacing-md);
   display: flex;

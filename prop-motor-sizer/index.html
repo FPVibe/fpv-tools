@@ -110,6 +110,52 @@
             </label>
           </div>
 
+          <details class="advanced">
+            <summary>Advanced</summary>
+            <div class="field-row">
+              <label class="field">
+                <span>Chemistry</span>
+                <select id="chemistry">
+                  <option value="lipo" selected>LiPo</option>
+                  <option value="lihv">LiHV</option>
+                  <option value="liion">Li-Ion</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Voltage basis</span>
+                <select id="volt-basis">
+                  <option value="full" selected>Full charge</option>
+                  <option value="nominal">Nominal</option>
+                  <option value="load">Under load</option>
+                </select>
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>Motor load factor <em><output id="load-factor-out">75%</output> of KV×V</em></span>
+                <input type="range" id="load-factor" min="60" max="90" step="1" value="75">
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>Altitude <em>m</em></span>
+                <input type="number" id="altitude" min="0" max="5000" step="50"
+                  placeholder="sea level">
+              </label>
+              <label class="field">
+                <span>Capacity <em>mAh</em></span>
+                <input type="number" id="capacity" min="50" max="30000" step="50" placeholder="—">
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>Measured max thrust <em>g/motor</em></span>
+                <input type="number" id="measured-thrust" min="1" max="20000" step="10"
+                  placeholder="calibrate from a thrust stand">
+              </label>
+            </div>
+          </details>
+
           <div class="actions">
             <button type="button" id="reset" class="btn-secondary">Clear all</button>
           </div>
@@ -137,11 +183,13 @@
           </div>
 
           <p class="disclaimer">
-                    Estimates use simplified physics (static-thrust and momentum-theory models) at
-                    full-charge voltage (4.2&nbsp;V/cell), assuming props load motors to ~75% of their
-                    unloaded RPM ceiling. Expect ±20–30% versus a thrust stand — use these numbers to
-                    compare options and catch mismatches, not to size fuses.
-                </p>
+            Estimates use simplified physics (static-thrust and momentum-theory models). By
+            default they're computed at full-charge voltage assuming props load motors to
+            ~75% of their unloaded RPM ceiling — both adjustable under Advanced, along with
+            altitude, battery chemistry, and a thrust-stand calibration point. Expect ±20–30%
+            versus a bench unless calibrated — use these numbers to compare options and catch
+            mismatches, not to size fuses.
+          </p>
         </section>
       </div>
     </div>

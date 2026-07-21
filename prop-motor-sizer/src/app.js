@@ -14,6 +14,34 @@ const FIELD_IDS = [
   "motor-count",
 ];
 
+// Advanced fields tune the model rather than describe the build, so
+// changing them keeps the selected preset label.
+const ADVANCED_IDS = [
+  "chemistry",
+  "volt-basis",
+  "load-factor",
+  "altitude",
+  "capacity",
+  "measured-thrust",
+];
+
+const ADVANCED_DEFAULTS = {
+  chemistry: "lipo",
+  "volt-basis": "full",
+  "load-factor": "75",
+  altitude: "",
+  capacity: "",
+  "measured-thrust": "",
+};
+
+// Per-cell voltage by chemistry and basis. "nominal" also sets the voltage
+// used for battery-energy (endurance) math.
+const CHEMISTRY = {
+  lipo: { full: 4.2, nominal: 3.7, load: 3.5 },
+  lihv: { full: 4.35, nominal: 3.8, load: 3.6 },
+  liion: { full: 4.2, nominal: 3.6, load: 3.3 },
+};
+
 const PRESETS = {
   whoop: {
     style: "freestyle",
@@ -82,6 +110,7 @@ function num(id) {
 }
 
 function readInputs() {
+  const chem = CHEMISTRY[$("chemistry").value] ?? CHEMISTRY.lipo;
   return {
     diameterIn: num("diameter"),
     pitchIn: num("pitch"),
@@ -92,6 +121,13 @@ function readInputs() {
     auwGrams: num("auw"),
     motorCount: num("motor-count"),
     style: $("style").value,
+    cellVoltage: chem[$("volt-basis").value] ?? chem.full,
+    cellVoltageFull: chem.full,
+    cellVoltageNominal: chem.nominal,
+    loadFactor: (num("load-factor") ?? 75) / 100,
+    altitudeM: num("altitude"),
+    capacityMah: num("capacity"),
+    measuredThrustG: num("measured-thrust"),
   };
 }
 
@@ -131,7 +167,14 @@ function renderMetrics(m) {
     cards.push(metricCard({
       label: "RPM under load",
       value: `≈ ${fmtInt(m.loadedRpm)}`,
-      sub: `unloaded ceiling ${fmtInt(m.maxRpm)}`,
+      sub: `unloaded ceiling ${fmtInt(m.maxRpm)} at ${m.voltage.toFixed(1)} V`,
+    }));
+  }
+  if (m.hoverFlightTimeMin !== undefined) {
+    cards.push(metricCard({
+      label: "Hover endurance",
+      value: `≈ ${m.hoverFlightTimeMin.toFixed(0)} min`,
+      sub: "ideal hover, 80% usable — mixed flying is far less",
     }));
   }
   if (m.tipSpeedMs !== undefined) {
@@ -172,6 +215,13 @@ function renderMetrics(m) {
     cards.push(metricCard({
       label: "Stator volume",
       value: `${fmtInt(m.statorVolumeMm3)} mm³`,
+    }));
+  }
+  if (m.airDensity !== undefined) {
+    cards.push(metricCard({
+      label: "Air density",
+      value: `${m.airDensity.toFixed(3)} kg/m³`,
+      sub: `${Math.round((m.airDensity / 1.225 - 1) * 100)}% vs sea level`,
     }));
   }
   return cards.join("");
@@ -232,7 +282,7 @@ function render() {
 
 function saveInputs() {
   const state = {};
-  for (const id of FIELD_IDS) state[id] = $(id).value;
+  for (const id of [...FIELD_IDS, ...ADVANCED_IDS]) state[id] = $(id).value;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
@@ -243,12 +293,16 @@ function saveInputs() {
 function loadInputs() {
   try {
     const state = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
-    for (const id of FIELD_IDS) {
+    for (const id of [...FIELD_IDS, ...ADVANCED_IDS]) {
       if (typeof state[id] === "string") $(id).value = state[id];
     }
   } catch {
     // Corrupt state - start fresh
   }
+}
+
+function syncLoadFactorOut() {
+  $("load-factor-out").textContent = `${$("load-factor").value}%`;
 }
 
 function applyPreset(name) {
@@ -259,10 +313,19 @@ function applyPreset(name) {
 
 function init() {
   loadInputs();
+  syncLoadFactorOut();
 
   for (const id of FIELD_IDS) {
     $(id).addEventListener("input", () => {
       $("preset").value = "";
+      saveInputs();
+      render();
+    });
+  }
+
+  for (const id of ADVANCED_IDS) {
+    $(id).addEventListener("input", () => {
+      syncLoadFactorOut();
       saveInputs();
       render();
     });
@@ -280,6 +343,8 @@ function init() {
     $("motor-count").value = "4";
     $("style").value = "freestyle";
     $("preset").value = "";
+    for (const [id, value] of Object.entries(ADVANCED_DEFAULTS)) $(id).value = value;
+    syncLoadFactorOut();
     saveInputs();
     render();
   });
