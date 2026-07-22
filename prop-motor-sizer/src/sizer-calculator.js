@@ -402,6 +402,7 @@ export function analyze(inputs) {
   }
 
   if (has(diameterIn) && has(pitchIn) && has(metrics.loadedRpm)) {
+    const motors = has(motorCount) ? motorCount : 4;
     metrics.thrustPerMotorG = staticThrustGrams(
       diameterIn,
       pitchIn,
@@ -413,12 +414,12 @@ export function analyze(inputs) {
       metrics.calibrationFactor = measuredThrustG / metrics.thrustPerMotorG;
       metrics.thrustPerMotorG = measuredThrustG;
     }
-    metrics.totalThrustG = metrics.thrustPerMotorG * motorCount;
+    metrics.totalThrustG = metrics.thrustPerMotorG * motors;
     metrics.maxPowerW =
       electricalPowerWatts(metrics.thrustPerMotorG, diameterIn, 0.55, 0.85, density) *
-      motorCount;
+      motors;
     metrics.maxCurrentA = metrics.maxPowerW / metrics.voltage;
-    metrics.maxCurrentPerMotorA = metrics.maxCurrentA / motorCount;
+    metrics.maxCurrentPerMotorA = metrics.maxCurrentA / motors;
   }
 
   if (has(auwGrams) && has(metrics.totalThrustG)) {
