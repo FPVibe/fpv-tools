@@ -274,6 +274,17 @@ Deno.test("analyze - grossly overloaded build gets a 'bad' verdict", () => {
   assert(verdicts.some((v: { level: string }) => v.level === "bad"));
 });
 
+Deno.test("analyze - zero or invalid motor count falls back to a quad", () => {
+  const base = analyze(FULL_5IN_6S).metrics;
+  for (const motorCount of [0, -2, NaN]) {
+    const m = analyze({ ...FULL_5IN_6S, motorCount }).metrics;
+    assertAlmostEquals(m.totalThrustG, base.totalThrustG, 1e-9);
+    assertAlmostEquals(m.discLoadingGCm2, base.discLoadingGCm2, 1e-9);
+    assert(Number.isFinite(m.maxCurrentPerMotorA), `per-motor current for count ${motorCount}`);
+    assert(Number.isFinite(m.hoverCurrentA), `hover current for count ${motorCount}`);
+  }
+});
+
 Deno.test("analyze - empty input does not throw", () => {
   const { metrics, recommendations, verdicts } = analyze({});
   assertEquals(Object.keys(metrics).length, 0);
