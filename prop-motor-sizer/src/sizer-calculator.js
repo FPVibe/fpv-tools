@@ -427,11 +427,12 @@ export function analyze(inputs) {
   }
 
   if (has(auwGrams) && has(diameterIn)) {
-    metrics.discLoadingGCm2 = discLoading(auwGrams, diameterIn, motorCount);
+    const motors = has(motorCount) ? motorCount : 4;
+    metrics.discLoadingGCm2 = discLoading(auwGrams, diameterIn, motors);
     if (has(metrics.voltage)) {
       metrics.hoverPowerW =
-        electricalPowerWatts(auwGrams / motorCount, diameterIn, 0.65, 0.85, density) *
-        motorCount;
+        electricalPowerWatts(auwGrams / motors, diameterIn, 0.65, 0.85, density) *
+        motors;
       metrics.hoverCurrentA = metrics.hoverPowerW / metrics.voltage;
       if (has(capacityMah) && has(cells)) {
         const energyWh = (capacityMah / 1000) * cells * cellVoltageNominal;
