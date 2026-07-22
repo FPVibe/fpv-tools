@@ -358,7 +358,6 @@ export function analyze(inputs) {
     kv,
     cells,
     auwGrams,
-    motorCount = 4,
     capacityMah,
     measuredThrustG,
   } = inputs;
@@ -366,6 +365,10 @@ export function analyze(inputs) {
   const stator = parseMotorSize(inputs.motorSize);
 
   const has = (n) => typeof n === "number" && Number.isFinite(n) && n > 0;
+
+  // Used as a divisor throughout, so an explicit 0/negative/NaN from a
+  // programmatic caller must fall back to a quad rather than poison the math.
+  const motorCount = has(inputs.motorCount) ? Math.round(inputs.motorCount) : 4;
 
   const loadFactor = has(inputs.loadFactor) ? inputs.loadFactor : DEFAULT_LOAD_FACTOR;
   const cellVoltage = has(inputs.cellVoltage) ? inputs.cellVoltage : CELL_VOLTAGE_FULL;
