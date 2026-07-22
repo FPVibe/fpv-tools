@@ -28,6 +28,18 @@ Compare two Betaflight Actual Rates profiles with real-time visualization. Featu
 - **Visibility toggles** — focus on specific profiles or axes
 - **Mobile-responsive** — works on tablet and phone
 
+### 🔩 Prop / Motor Sizer
+**Path:** `./prop-motor-sizer/`
+
+Characterize an FPV powertrain from prop size, blade count, motor size, KV, battery cells, and all-up weight — or leave any of those blank and get suggested ranges derived from what you did enter. Features:
+- **Flight character verdicts** — thrust-to-weight interpretation, motor/prop torque match, KV-vs-voltage rev match, and tip-speed warnings
+- **Estimated numbers** — static thrust, hover throttle, RPM under load, tip speed (Mach), pitch speed, hover and full-throttle current draw, disc loading
+- **Suggested ranges** — e.g. pick a 5″ prop on 6S and get a recommended KV band and a list of suitable stator sizes; enter a motor and get the prop diameters it suits
+- **Style-aware** — cinematic / long-range / freestyle / racing biases pitch, KV, and AUW recommendations
+- **Presets** — tiny whoop, 3″ 4S, 5″ 6S freestyle, 5″ 4S race, 7″ long-range starting points
+- **Advanced panel** — adjust the motor load factor, battery chemistry (LiPo/LiHV/Li-Ion) and voltage basis (full charge / nominal / under load), and altitude; add battery capacity for a hover-endurance estimate; or enter one thrust-stand measurement to calibrate the whole model to your bench numbers
+- Inputs persist in localStorage; estimates are simplified-physics ballparks (±20–30% unless calibrated), not thrust-stand data
+
 ## Getting Started
 
 1. **Open fpv-tools in your browser:** https://cori.github.io/fpv-tools/
@@ -106,6 +118,12 @@ fpv-tools/
 ├── igow/
 │   ├── index.html          # IGOW Challenge Reference tool
 │   └── igow.db              # SQLite dataset (queried via sql.js)
+├── prop-motor-sizer/
+│   ├── index.html          # Prop / Motor Sizer tool
+│   ├── styles.css
+│   └── src/
+│       ├── app.js          # DOM wiring and rendering
+│       └── sizer-calculator.js  # Pure sizing math (tested)
 └── .github/
     └── workflows/
         ├── deploy.yml      # GitHub Pages auto-deploy on push
