@@ -397,6 +397,21 @@ class RateProfileComparison {
       const settings = parseCLI(text);
       const profileObj = profile === 'a' ? this.profileA : this.profileB;
 
+      // Detect rates type and warn when it is not ACTUAL. Other types
+      // (BETAFLIGHT, KISS, QUICK) store roll_rate/rc_rate on very different
+      // scales, so the imported numbers will produce wrong curves. Let the
+      // user know before they see a confusing flat-line graph.
+      const detectedType = (settings.rates_type || '').trim().toUpperCase();
+      if (detectedType && detectedType !== 'ACTUAL') {
+        this.showStatus(
+          statusSpan,
+          `Import stopped: detected ${detectedType} rates. This tool only supports ACTUAL rates — ` +
+          `convert in Betaflight Configurator first (Rates tab → Type → Actual).`,
+          'error'
+        );
+        return;
+      }
+
       // Map settings to profile
       const mapping = {
         roll_rc_rate: (v) => profileObj.rates.roll.center = parseInt(v),
@@ -427,8 +442,12 @@ class RateProfileComparison {
       this.updateGraphs();
       this.updateExports();
 
-      this.showStatus(statusSpan, `Successfully imported ${count} settings`, 'success');
-      textarea.value = '';
+      if (count === 0) {
+        this.showStatus(statusSpan, 'No recognised rate settings found — check the pasted text.', 'error');
+      } else {
+        textarea.value = '';
+        this.showStatus(statusSpan, `Imported ${count} settings`, 'success');
+      }
     } catch (error) {
       this.showStatus(statusSpan, `Import failed: ${error.message}`, 'error');
     }
