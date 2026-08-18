@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { parseCLI, generateCLI } from "../../rate-profile/src/cli-parser.js";
+import { generateCLI, parseCLI } from "../../rate-profile/src/cli-parser.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
