@@ -6,7 +6,9 @@ import { normalizeLimitPercent, normalizeLimitType } from './rate-calculator.js'
  * @returns {Object} Parsed settings as key-value pairs
  */
 export function parseCLI(text) {
-  const settings = {};
+  // Use a null-prototype object so `key in settings` only checks parsed keys,
+  // never inherited properties like `constructor` or `toString`.
+  const settings = Object.create(null);
   const lines = text.split('\n');
 
   for (const line of lines) {
