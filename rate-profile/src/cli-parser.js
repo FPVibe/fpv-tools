@@ -6,7 +6,9 @@ import { normalizeLimitPercent, normalizeLimitType } from './rate-calculator.js'
  * @returns {Object} Parsed settings as key-value pairs
  */
 export function parseCLI(text) {
-  const settings = {};
+  // Use a null-prototype object so `key in settings` only checks parsed keys,
+  // never inherited properties like `constructor` or `toString`.
+  const settings = Object.create(null);
   const lines = text.split('\n');
 
   for (const line of lines) {
@@ -16,8 +18,13 @@ export function parseCLI(text) {
     if (match) {
       const key = match[1].toLowerCase();
       const value = match[2].trim();
-      // Store last occurrence (overwrites previous)
-      settings[key] = value;
+      // Store first occurrence only. Betaflight "dump rates" outputs every
+      // rateprofile in sequence; keeping the first means we always import
+      // rateprofile 0 instead of accidentally importing a later profile's
+      // (often zeroed-out) values.
+      if (!(key in settings)) {
+        settings[key] = value;
+      }
     }
   }
 
