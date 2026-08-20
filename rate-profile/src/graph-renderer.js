@@ -1,7 +1,21 @@
 import { calculateRate, calculateThrottle } from "./rate-calculator.js";
 
 /**
- * Renders comparison graphs for rate profiles
+ * Dash patterns for up to 5 simultaneous profiles.
+ * Index corresponds to profile slot (0 = A, 1 = B, …).
+ * @type {number[][]}
+ */
+export const PROFILE_DASH_PATTERNS = [
+  [], // A — solid
+  [10, 5], // B — dashed
+  [3, 4], // C — dotted
+  [12, 4, 3, 4], // D — dash-dot
+  [16, 6], // E — long-dash
+];
+
+/**
+ * Renders comparison graphs for rate profiles.
+ * Accepts an arbitrary-length array of profiles (up to 5).
  */
 export class GraphRenderer {
   constructor(rateCanvas, throttleCanvas) {
@@ -24,8 +38,7 @@ export class GraphRenderer {
 
     // Visibility settings
     this.visibility = {
-      profileA: true,
-      profileB: true,
+      profiles: [true, true, false, false, false], // one slot per max-profile
       roll: true,
       pitch: true,
       yaw: true,
@@ -33,11 +46,20 @@ export class GraphRenderer {
   }
 
   /**
-   * Set visibility for profiles and attitudes
-   * @param {Object} visibility - Visibility settings
+   * Update visibility settings.
+   * @param {Object} opts
+   * @param {boolean[]} [opts.profiles] - Per-slot visibility array
+   * @param {boolean}  [opts.roll]
+   * @param {boolean}  [opts.pitch]
+   * @param {boolean}  [opts.yaw]
    */
-  setVisibility(visibility) {
-    this.visibility = { ...this.visibility, ...visibility };
+  setVisibility(opts) {
+    if (opts.profiles !== undefined) {
+      this.visibility.profiles = [...opts.profiles];
+    }
+    if (opts.roll !== undefined) this.visibility.roll = opts.roll;
+    if (opts.pitch !== undefined) this.visibility.pitch = opts.pitch;
+    if (opts.yaw !== undefined) this.visibility.yaw = opts.yaw;
   }
 
   /**
@@ -113,7 +135,7 @@ export class GraphRenderer {
 
     // Y-axis labels
     for (let i = 0; i <= 4; i++) {
-      const value = yMax - (i * yMax / 2);
+      const value = yMax - (i * yMax) / 2;
       const y = this.padding + (height - 2 * this.padding) * (i / 4);
       ctx.fillText(Math.round(value) + "°/s", this.padding - 10, y + 4);
     }
@@ -150,7 +172,7 @@ export class GraphRenderer {
 
     // Y-axis labels
     for (let i = 0; i <= 10; i++) {
-      const value = 1.0 - (i / 10);
+      const value = 1.0 - i / 10;
       const y = this.padding + (height - 2 * this.padding) * (i / 10);
       ctx.fillText(value.toFixed(1), this.padding - 10, y + 4);
     }
@@ -181,29 +203,23 @@ export class GraphRenderer {
    * @param {Object} rates - Rate settings for specific axis
    * @param {string} color - Curve color
    * @param {number} yMax - Maximum Y value for scaling
-   * @param {boolean} dashed - Whether to use dashed line
+   * @param {number[]} [dashPattern=[]] - Canvas line-dash pattern for this profile
    * @param {string} [ratesType='ACTUAL'] - Rate algorithm to use ('ACTUAL' or 'BETAFLIGHT')
    */
-  drawRateCurve(ctx, width, height, rates, color, yMax, dashed = false, ratesType = "ACTUAL") {
+  drawRateCurve(ctx, width, height, rates, color, yMax, dashPattern = [], ratesType = "ACTUAL") {
     const steps = 200;
 
     ctx.strokeStyle = color;
     ctx.lineWidth = 3;
-    ctx.setLineDash(dashed ? [10, 5] : []);
+    ctx.setLineDash(dashPattern);
     ctx.beginPath();
 
     for (let i = 0; i <= steps; i++) {
-      const rcCommand = -1 + (2 * i / steps);
-      const rateValue = calculateRate(
-        rcCommand,
-        rates.center,
-        rates.maxRate,
-        rates.expo,
-        ratesType,
-      );
+      const rcCommand = -1 + (2 * i) / steps;
+      const rateValue = calculateRate(rcCommand, rates.center, rates.maxRate, rates.expo, ratesType);
 
       const x = this.padding + (width - 2 * this.padding) * ((rcCommand + 1) / 2);
-      const y = (height / 2) - ((rateValue / yMax) * (height - 2 * this.padding) / 2);
+      const y = height / 2 - (rateValue / yMax) * ((height - 2 * this.padding) / 2);
 
       if (i === 0) {
         ctx.moveTo(x, y);
@@ -223,14 +239,14 @@ export class GraphRenderer {
    * @param {number} height
    * @param {Object} throttle - Throttle settings
    * @param {string} color - Curve color
-   * @param {boolean} dashed - Whether to use dashed line
+   * @param {number[]} [dashPattern=[]] - Canvas line-dash pattern for this profile
    */
-  drawThrottleCurve(ctx, width, height, throttle, color, dashed = false) {
+  drawThrottleCurve(ctx, width, height, throttle, color, dashPattern = []) {
     const steps = 200;
 
     ctx.strokeStyle = color;
     ctx.lineWidth = 3;
-    ctx.setLineDash(dashed ? [10, 5] : []);
+    ctx.setLineDash(dashPattern);
     ctx.beginPath();
 
     for (let i = 0; i <= steps; i++) {
@@ -258,149 +274,98 @@ export class GraphRenderer {
   }
 
   /**
-   * Calculate maximum rate for scaling
-   * @param {Object} profileA
-   * @param {Object} profileB
-   * @returns {number} Maximum rate value
+   * Calculate maximum rate across all visible profiles and axes for Y-axis scaling.
+   * @param {Object[]} profiles - Array of profile objects (entries may be null)
+   * @returns {number} Maximum rate value (minimum 1000)
    */
-  calculateMaxRate(profileA, profileB) {
+  calculateMaxRate(profiles) {
     const axes = ["roll", "pitch", "yaw"];
     let maxRate = 0;
 
-    axes.forEach((axis) => {
-      if (this.visibility[axis]) {
-        if (profileA && this.visibility.profileA) {
-          const rate = Math.abs(calculateRate(
-            1,
-            profileA.rates[axis].center,
-            profileA.rates[axis].maxRate,
-            profileA.rates[axis].expo,
-            profileA.ratesType || "ACTUAL",
-          ));
+    profiles.forEach((profile, i) => {
+      if (!profile || !this.visibility.profiles[i]) return;
+      axes.forEach((axis) => {
+        if (this.visibility[axis]) {
+          const rate = Math.abs(
+            calculateRate(
+              1,
+              profile.rates[axis].center,
+              profile.rates[axis].maxRate,
+              profile.rates[axis].expo,
+              profile.ratesType || "ACTUAL",
+            ),
+          );
           maxRate = Math.max(maxRate, rate);
         }
-
-        if (profileB && this.visibility.profileB) {
-          const rate = Math.abs(calculateRate(
-            1,
-            profileB.rates[axis].center,
-            profileB.rates[axis].maxRate,
-            profileB.rates[axis].expo,
-            profileB.ratesType || "ACTUAL",
-          ));
-          maxRate = Math.max(maxRate, rate);
-        }
-      }
+      });
     });
 
     return Math.max(1000, maxRate * 1.1);
   }
 
   /**
-   * Render rate comparison graph
-   * @param {Object} profileA - First profile
-   * @param {Object} profileB - Second profile
+   * Render rate comparison graph for all profiles.
+   * @param {Object[]} profiles - Array of profile objects
    */
-  renderRates(profileA, profileB) {
+  renderRates(profiles) {
     const width = this.rateCanvas.width;
     const height = this.rateCanvas.height;
     const ctx = this.rateCtx;
+    const axes = ["roll", "pitch", "yaw"];
 
-    // Clear canvas
     this.clearCanvas(ctx, width, height);
-
-    // Draw grid
     this.drawGrid(ctx, width, height);
 
-    // Calculate max rate for scaling
-    const yMax = this.calculateMaxRate(profileA, profileB);
+    const yMax = this.calculateMaxRate(profiles);
 
-    // Draw curves for each visible axis
-    const axes = ["roll", "pitch", "yaw"];
-    axes.forEach((axis) => {
-      if (!this.visibility[axis]) return;
-
-      if (profileA && this.visibility.profileA) {
+    profiles.forEach((profile, i) => {
+      if (!profile || !this.visibility.profiles[i]) return;
+      const dashPattern = PROFILE_DASH_PATTERNS[i] ?? [];
+      axes.forEach((axis) => {
+        if (!this.visibility[axis]) return;
         this.drawRateCurve(
           ctx,
           width,
           height,
-          profileA.rates[axis],
+          profile.rates[axis],
           this.colors[axis],
           yMax,
-          false, // solid line for Profile A
-          profileA.ratesType || "ACTUAL",
+          dashPattern,
+          profile.ratesType || "ACTUAL",
         );
-      }
-
-      if (profileB && this.visibility.profileB) {
-        this.drawRateCurve(
-          ctx,
-          width,
-          height,
-          profileB.rates[axis],
-          this.colors[axis],
-          yMax,
-          true, // dashed line for Profile B
-          profileB.ratesType || "ACTUAL",
-        );
-      }
+      });
     });
 
-    // Draw axes
     this.drawRateAxes(ctx, width, height, yMax);
   }
 
   /**
-   * Render throttle comparison graph
-   * @param {Object} profileA - First profile
-   * @param {Object} profileB - Second profile
+   * Render throttle comparison graph for all profiles.
+   * @param {Object[]} profiles - Array of profile objects
    */
-  renderThrottle(profileA, profileB) {
+  renderThrottle(profiles) {
     const width = this.throttleCanvas.width;
     const height = this.throttleCanvas.height;
     const ctx = this.throttleCtx;
 
-    // Clear canvas
     this.clearCanvas(ctx, width, height);
-
-    // Draw grid
     this.drawGrid(ctx, width, height);
 
-    // Draw throttle curves
-    if (profileA && this.visibility.profileA) {
-      this.drawThrottleCurve(
-        ctx,
-        width,
-        height,
-        profileA.throttle,
-        "#00aaff", // Blue for throttle
-        false, // solid line for Profile A
-      );
-    }
+    profiles.forEach((profile, i) => {
+      if (!profile || !this.visibility.profiles[i]) return;
+      const dashPattern = PROFILE_DASH_PATTERNS[i] ?? [];
+      this.drawThrottleCurve(ctx, width, height, profile.throttle, "#00aaff", dashPattern);
+    });
 
-    if (profileB && this.visibility.profileB) {
-      this.drawThrottleCurve(
-        ctx,
-        width,
-        height,
-        profileB.throttle,
-        "#00aaff", // Blue for throttle
-        true, // dashed line for Profile B
-      );
-    }
-
-    // Draw axes
     this.drawThrottleAxes(ctx, width, height);
   }
 
   /**
-   * Render both graphs
-   * @param {Object} profileA - First profile
-   * @param {Object} profileB - Second profile
+   * Render both graphs for all profiles.
+   * @param {Object[]} profiles - Array of profile objects
    */
-  render(profileA, profileB) {
-    this.renderRates(profileA, profileB);
-    this.renderThrottle(profileA, profileB);
+  render(profiles) {
+    this.renderRates(profiles);
+    this.renderThrottle(profiles);
   }
 }
