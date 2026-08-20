@@ -175,13 +175,31 @@ Deno.test("parseCLI - rates_type is captured for type detection", () => {
   assertEquals(s.rates_type, "BETAFLIGHT");
 });
 
+Deno.test("parseCLI - ACTUAL dump: extracts roll_srate as the max-rate key", () => {
+  const s = parseCLI(
+    "set rates_type = ACTUAL\nset roll_rc_rate = 30\nset roll_srate = 130\nset roll_expo = 30",
+  );
+  assertEquals(s.roll_srate, "130");
+  assertEquals(s.roll_rc_rate, "30");
+  assertEquals(s.roll_expo, "30");
+});
+
+Deno.test("parseCLI - when both roll_rate and roll_srate appear, first occurrence wins", () => {
+  // In practice the importer (app.js) chooses srate over rate by mapping order,
+  // but parseCLI itself just keeps the first-occurrence value for each key.
+  const s = parseCLI("set roll_rate = 670\nset roll_srate = 130");
+  assertEquals(s.roll_rate, "670");
+  assertEquals(s.roll_srate, "130");
+});
+
 // ---------------------------------------------------------------------------
 // generateCLI — round-trip sanity
 // ---------------------------------------------------------------------------
 
-Deno.test("generateCLI - emitted lines are parseable back by parseCLI", () => {
+Deno.test("generateCLI - ACTUAL profile round-trip: emits roll_srate", () => {
   const profile = {
     name: "Test",
+    ratesType: "ACTUAL",
     rates: {
       roll: { center: 70, maxRate: 670, expo: 25 },
       pitch: { center: 70, maxRate: 670, expo: 25 },
@@ -192,9 +210,29 @@ Deno.test("generateCLI - emitted lines are parseable back by parseCLI", () => {
   const cli = generateCLI(profile);
   const s = parseCLI(cli);
   assertEquals(s.roll_rc_rate, "70");
-  assertEquals(s.roll_rate, "670");
+  assertEquals(s.roll_srate, "670", "ACTUAL type must emit roll_srate, not roll_rate");
   assertEquals(s.roll_expo, "25");
   assertEquals(s.thr_mid, "50");
   assertEquals(s.throttle_limit_type, "OFF");
   assertEquals(s.throttle_limit_percent, "100");
+  assertEquals(s.rates_type, "ACTUAL");
+});
+
+Deno.test("generateCLI - BETAFLIGHT profile round-trip: emits roll_rate", () => {
+  const profile = {
+    name: "BFTest",
+    ratesType: "BETAFLIGHT",
+    rates: {
+      roll: { center: 100, maxRate: 70, expo: 20 },
+      pitch: { center: 100, maxRate: 70, expo: 20 },
+      yaw: { center: 90, maxRate: 50, expo: 10 },
+    },
+    throttle: { mid: 50, expo: 0, limitType: "OFF", limitPercent: 100 },
+  };
+  const cli = generateCLI(profile);
+  const s = parseCLI(cli);
+  assertEquals(s.roll_rc_rate, "100");
+  assertEquals(s.roll_rate, "70", "BETAFLIGHT type must emit roll_rate (super rate)");
+  assertEquals(s.roll_expo, "20");
+  assertEquals(s.rates_type, "BETAFLIGHT");
 });

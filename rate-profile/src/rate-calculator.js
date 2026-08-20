@@ -1,3 +1,7 @@
+// Increment applied to rc_rate when it exceeds 2.0 in BETAFLIGHT mode.
+// Matches the RC_RATE_INCREMENTAL constant in the Betaflight source.
+const RC_RATE_INCREMENTAL = 14.54;
+
 /**
  * Calculate the actual rate based on Betaflight's Actual Rates algorithm
  * @param {number} rcCommand - RC stick input from -1 to 1
@@ -25,6 +29,65 @@ export function calculateActualRate(rcCommand, center, maxRate, expo) {
   const rate = rcCommandAbs * centerSensitivity + expof * (maxRate - centerSensitivity);
 
   return rcCommand >= 0 ? rate : -rate;
+}
+
+/**
+ * Calculate the rate using Betaflight's classic (BETAFLIGHT) algorithm.
+ *
+ * Parameter semantics differ from ACTUAL rates:
+ *   - rcRate  → roll_rc_rate (0-255): overall rate multiplier
+ *   - superRate → roll_rate (0-100): "super-rate" applied above 65% stick
+ *   - expo    → roll_expo  (0-100): expo curve
+ *
+ * @param {number} rcCommand - RC stick input from -1 to 1
+ * @param {number} rcRate    - rc_rate CLI value (0-255)
+ * @param {number} superRate - super-rate CLI value (0-100)
+ * @param {number} expo      - expo CLI value (0-100)
+ * @returns {number} Rate in degrees per second
+ */
+export function calculateBetaflightRate(rcCommand, rcRate, superRate, expo) {
+  const rcCommandAbs = Math.abs(rcCommand);
+
+  // Apply expo
+  let rcCommandf = rcCommand;
+  if (expo > 0) {
+    const expof = expo / 100;
+    rcCommandf = rcCommand * (expof * Math.pow(rcCommandAbs, 3) + (1 - expof));
+  }
+
+  // Base rate (CLI value 0-255 → 0-2.55; incremental above 2.0)
+  let rate = rcRate / 100;
+  if (rate > 2.0) {
+    rate += RC_RATE_INCREMENTAL * (rate - 2.0);
+  }
+
+  let angularVel = 200 * rate * rcCommandf;
+
+  // Super-rate factor: boosts rate at high stick deflection.
+  // Uses the post-expo absolute value (matching Betaflight firmware behaviour).
+  if (superRate > 0) {
+    const rcFactor = 1 / Math.max(0.01, 1 - Math.abs(rcCommandf) * (superRate / 100));
+    angularVel *= rcFactor;
+  }
+
+  return angularVel;
+}
+
+/**
+ * Unified rate dispatcher — calls the right algorithm for the given ratesType.
+ * @param {number} rcCommand - RC stick input from -1 to 1
+ * @param {number} center    - roll_rc_rate CLI value
+ * @param {number} maxRate   - roll_srate (ACTUAL) or roll_rate super-rate (BETAFLIGHT)
+ * @param {number} expo      - roll_expo CLI value
+ * @param {string} ratesType - 'ACTUAL' (default) or 'BETAFLIGHT'
+ * @returns {number} Rate in degrees per second
+ */
+export function calculateRate(rcCommand, center, maxRate, expo, ratesType = "ACTUAL") {
+  const type = (ratesType || "ACTUAL").toUpperCase();
+  if (type === "BETAFLIGHT") {
+    return calculateBetaflightRate(rcCommand, center, maxRate, expo);
+  }
+  return calculateActualRate(rcCommand, center, maxRate, expo);
 }
 
 /**

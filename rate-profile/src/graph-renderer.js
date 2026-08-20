@@ -1,4 +1,4 @@
-import { calculateActualRate, calculateThrottle } from './rate-calculator.js';
+import { calculateRate, calculateThrottle } from "./rate-calculator.js";
 
 /**
  * Renders comparison graphs for rate profiles
@@ -7,20 +7,20 @@ export class GraphRenderer {
   constructor(rateCanvas, throttleCanvas) {
     this.rateCanvas = rateCanvas;
     this.throttleCanvas = throttleCanvas;
-    this.rateCtx = rateCanvas.getContext('2d');
-    this.throttleCtx = throttleCanvas.getContext('2d');
+    this.rateCtx = rateCanvas.getContext("2d");
+    this.throttleCtx = throttleCanvas.getContext("2d");
 
     // Visual configuration
     this.colors = {
-      roll: '#ff3366',    // Red
-      pitch: '#33ff66',   // Green
-      yaw: '#ffaa00'      // Orange
+      roll: "#ff3366", // Red
+      pitch: "#33ff66", // Green
+      yaw: "#ffaa00", // Orange
     };
 
     this.padding = 60;
-    this.gridColor = '#333';
-    this.axisColor = '#666';
-    this.labelColor = '#999';
+    this.gridColor = "#333";
+    this.axisColor = "#666";
+    this.labelColor = "#999";
 
     // Visibility settings
     this.visibility = {
@@ -28,7 +28,7 @@ export class GraphRenderer {
       profileB: true,
       roll: true,
       pitch: true,
-      yaw: true
+      yaw: true,
     };
   }
 
@@ -47,7 +47,7 @@ export class GraphRenderer {
    * @param {number} height
    */
   clearCanvas(ctx, width, height) {
-    ctx.fillStyle = '#1a1a1a';
+    ctx.fillStyle = "#1a1a1a";
     ctx.fillRect(0, 0, width, height);
   }
 
@@ -108,22 +108,22 @@ export class GraphRenderer {
 
     // Labels
     ctx.fillStyle = this.labelColor;
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'right';
+    ctx.font = "12px monospace";
+    ctx.textAlign = "right";
 
     // Y-axis labels
     for (let i = 0; i <= 4; i++) {
       const value = yMax - (i * yMax / 2);
       const y = this.padding + (height - 2 * this.padding) * (i / 4);
-      ctx.fillText(Math.round(value) + '°/s', this.padding - 10, y + 4);
+      ctx.fillText(Math.round(value) + "°/s", this.padding - 10, y + 4);
     }
 
     // X-axis labels
-    ctx.textAlign = 'center';
-    ctx.fillText('-1.0', this.padding, height - this.padding + 20);
-    ctx.fillText('0.0', width / 2, height - this.padding + 20);
-    ctx.fillText('1.0', width - this.padding, height - this.padding + 20);
-    ctx.fillText('RC Command', width / 2, height - 10);
+    ctx.textAlign = "center";
+    ctx.fillText("-1.0", this.padding, height - this.padding + 20);
+    ctx.fillText("0.0", width / 2, height - this.padding + 20);
+    ctx.fillText("1.0", width - this.padding, height - this.padding + 20);
+    ctx.fillText("RC Command", width / 2, height - 10);
   }
 
   /**
@@ -145,8 +145,8 @@ export class GraphRenderer {
 
     // Labels
     ctx.fillStyle = this.labelColor;
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'right';
+    ctx.font = "12px monospace";
+    ctx.textAlign = "right";
 
     // Y-axis labels
     for (let i = 0; i <= 10; i++) {
@@ -156,20 +156,20 @@ export class GraphRenderer {
     }
 
     // X-axis labels
-    ctx.textAlign = 'center';
+    ctx.textAlign = "center";
     for (let i = 0; i <= 10; i++) {
       const value = i / 10;
       const x = this.padding + (width - 2 * this.padding) * (i / 10);
       ctx.fillText(value.toFixed(1), x, height - this.padding + 20);
     }
 
-    ctx.fillText('Throttle Input', width / 2, height - 10);
+    ctx.fillText("Throttle Input", width / 2, height - 10);
 
     // Y-axis label (rotated)
     ctx.save();
     ctx.translate(20, height / 2);
     ctx.rotate(-Math.PI / 2);
-    ctx.fillText('Throttle Output', 0, 0);
+    ctx.fillText("Throttle Output", 0, 0);
     ctx.restore();
   }
 
@@ -182,8 +182,9 @@ export class GraphRenderer {
    * @param {string} color - Curve color
    * @param {number} yMax - Maximum Y value for scaling
    * @param {boolean} dashed - Whether to use dashed line
+   * @param {string} [ratesType='ACTUAL'] - Rate algorithm to use ('ACTUAL' or 'BETAFLIGHT')
    */
-  drawRateCurve(ctx, width, height, rates, color, yMax, dashed = false) {
+  drawRateCurve(ctx, width, height, rates, color, yMax, dashed = false, ratesType = "ACTUAL") {
     const steps = 200;
 
     ctx.strokeStyle = color;
@@ -193,11 +194,12 @@ export class GraphRenderer {
 
     for (let i = 0; i <= steps; i++) {
       const rcCommand = -1 + (2 * i / steps);
-      const rateValue = calculateActualRate(
+      const rateValue = calculateRate(
         rcCommand,
         rates.center,
         rates.maxRate,
-        rates.expo
+        rates.expo,
+        ratesType,
       );
 
       const x = this.padding + (width - 2 * this.padding) * ((rcCommand + 1) / 2);
@@ -262,27 +264,29 @@ export class GraphRenderer {
    * @returns {number} Maximum rate value
    */
   calculateMaxRate(profileA, profileB) {
-    const axes = ['roll', 'pitch', 'yaw'];
+    const axes = ["roll", "pitch", "yaw"];
     let maxRate = 0;
 
-    axes.forEach(axis => {
+    axes.forEach((axis) => {
       if (this.visibility[axis]) {
         if (profileA && this.visibility.profileA) {
-          const rate = Math.abs(calculateActualRate(
+          const rate = Math.abs(calculateRate(
             1,
             profileA.rates[axis].center,
             profileA.rates[axis].maxRate,
-            profileA.rates[axis].expo
+            profileA.rates[axis].expo,
+            profileA.ratesType || "ACTUAL",
           ));
           maxRate = Math.max(maxRate, rate);
         }
 
         if (profileB && this.visibility.profileB) {
-          const rate = Math.abs(calculateActualRate(
+          const rate = Math.abs(calculateRate(
             1,
             profileB.rates[axis].center,
             profileB.rates[axis].maxRate,
-            profileB.rates[axis].expo
+            profileB.rates[axis].expo,
+            profileB.ratesType || "ACTUAL",
           ));
           maxRate = Math.max(maxRate, rate);
         }
@@ -312,8 +316,8 @@ export class GraphRenderer {
     const yMax = this.calculateMaxRate(profileA, profileB);
 
     // Draw curves for each visible axis
-    const axes = ['roll', 'pitch', 'yaw'];
-    axes.forEach(axis => {
+    const axes = ["roll", "pitch", "yaw"];
+    axes.forEach((axis) => {
       if (!this.visibility[axis]) return;
 
       if (profileA && this.visibility.profileA) {
@@ -324,7 +328,8 @@ export class GraphRenderer {
           profileA.rates[axis],
           this.colors[axis],
           yMax,
-          false // solid line for Profile A
+          false, // solid line for Profile A
+          profileA.ratesType || "ACTUAL",
         );
       }
 
@@ -336,7 +341,8 @@ export class GraphRenderer {
           profileB.rates[axis],
           this.colors[axis],
           yMax,
-          true // dashed line for Profile B
+          true, // dashed line for Profile B
+          profileB.ratesType || "ACTUAL",
         );
       }
     });
@@ -368,8 +374,8 @@ export class GraphRenderer {
         width,
         height,
         profileA.throttle,
-        '#00aaff', // Blue for throttle
-        false // solid line for Profile A
+        "#00aaff", // Blue for throttle
+        false, // solid line for Profile A
       );
     }
 
@@ -379,8 +385,8 @@ export class GraphRenderer {
         width,
         height,
         profileB.throttle,
-        '#00aaff', // Blue for throttle
-        true // dashed line for Profile B
+        "#00aaff", // Blue for throttle
+        true, // dashed line for Profile B
       );
     }
 
