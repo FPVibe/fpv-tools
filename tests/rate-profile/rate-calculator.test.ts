@@ -257,3 +257,12 @@ Deno.test("calculateActualRate - mid-stick with expo=50 matches firmware formula
   const expected = 0.3125 * (7 + 663 * 0.5);
   assertAlmostEquals(calculateRate(0.5, 70, 670, 50), expected, 1e-9);
 });
+
+Deno.test("calculateActualRate - full-stick output equals maxRate (regression: import roll_srate×10)", () => {
+  // The graph endpoint is always exactly maxRate, regardless of center or expo.
+  // After fixing import to apply ×10 (roll_srate=110 → maxRate=1100), the graph
+  // must show 1100 deg/s at full stick — not 110.
+  assertAlmostEquals(calculateRate(1, 70, 1100, 0), 1100, 1e-9);
+  assertAlmostEquals(calculateRate(1, 16, 1100, 30), 1100, 1e-9); // expo doesn't change endpoint
+  assertAlmostEquals(calculateRate(1, 70, 670, 0), 670, 1e-9); // existing profile still correct
+});

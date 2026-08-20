@@ -210,7 +210,8 @@ Deno.test("generateCLI - ACTUAL profile round-trip: emits roll_srate", () => {
   const cli = generateCLI(profile);
   const s = parseCLI(cli);
   assertEquals(s.roll_rc_rate, "70");
-  assertEquals(s.roll_srate, "670", "ACTUAL type must emit roll_srate, not roll_rate");
+  // ACTUAL rates store roll_srate as 1/10 of deg/s. maxRate=670 deg/s → roll_srate=67.
+  assertEquals(s.roll_srate, "67", "ACTUAL maxRate 670 deg/s must emit roll_srate 67 (÷10)");
   assertEquals(s.roll_expo, "25");
   assertEquals(s.thr_mid, "50");
   assertEquals(s.throttle_limit_type, "OFF");
@@ -237,6 +238,69 @@ Deno.test("generateCLI - BETAFLIGHT profile round-trip: emits roll_srate", () =>
   assertEquals(s.roll_srate, "70", "BETAFLIGHT type must emit roll_srate (super rate, 0-100)");
   assertEquals(s.roll_expo, "20");
   assertEquals(s.rates_type, "BETAFLIGHT");
+});
+
+// ---------------------------------------------------------------------------
+// generateCLI — ACTUAL rates: roll_srate ÷10 scaling (regression for #issue)
+// ---------------------------------------------------------------------------
+
+Deno.test("generateCLI - ACTUAL: maxRate 1100 emits roll_srate 110 (user-reported bug)", () => {
+  // The Betaflight firmware stores ACTUAL max-rate in 1/10 deg/s units on the CLI.
+  // A profile with 1100 deg/s max rate must emit roll_srate = 110, not 1100.
+  // Before the fix, importing roll_srate=110 produced maxRate=110 → graph showed
+  // 110 deg/s instead of 1100 deg/s.
+  const profile = {
+    ratesType: "ACTUAL",
+    rates: {
+      roll: { center: 16, maxRate: 1100, expo: 0 },
+      pitch: { center: 16, maxRate: 1100, expo: 0 },
+      yaw: { center: 16, maxRate: 1100, expo: 0 },
+    },
+    throttle: { mid: 50, expo: 0, limitType: "OFF", limitPercent: 100 },
+  };
+  const cli = generateCLI(profile);
+  const s = parseCLI(cli);
+  assertEquals(s.roll_srate, "110", "1100 deg/s must export as roll_srate=110");
+  assertEquals(s.pitch_srate, "110");
+  assertEquals(s.yaw_srate, "110");
+});
+
+Deno.test("generateCLI - ACTUAL: round-trips roll_srate through ÷10/×10 scaling", () => {
+  // generateCLI divides maxRate by 10 for ACTUAL; if that CLI is re-imported
+  // with the ×10 scale factor, the deg/s value is recovered exactly.
+  const internalDegPerSec = 1100;
+  const profile = {
+    ratesType: "ACTUAL",
+    rates: {
+      roll: { center: 16, maxRate: internalDegPerSec, expo: 0 },
+      pitch: { center: 16, maxRate: internalDegPerSec, expo: 0 },
+      yaw: { center: 16, maxRate: internalDegPerSec, expo: 0 },
+    },
+    throttle: { mid: 50, expo: 0, limitType: "OFF", limitPercent: 100 },
+  };
+  const cli = generateCLI(profile);
+  const s = parseCLI(cli);
+  // The emitted CLI value should be the internal deg/s ÷ 10.
+  const emittedSrate = parseInt(s.roll_srate, 10);
+  // Re-applying ×10 (the import step) must recover the original deg/s value.
+  assertEquals(emittedSrate * 10, internalDegPerSec);
+});
+
+Deno.test("generateCLI - BETAFLIGHT: roll_srate emitted without scaling (super rate %)", () => {
+  // BETAFLIGHT super rate is 0-100%; no ÷10 scaling applied.
+  const profile = {
+    ratesType: "BETAFLIGHT",
+    rates: {
+      roll: { center: 100, maxRate: 70, expo: 20 },
+      pitch: { center: 100, maxRate: 70, expo: 20 },
+      yaw: { center: 90, maxRate: 50, expo: 10 },
+    },
+    throttle: { mid: 50, expo: 0, limitType: "OFF", limitPercent: 100 },
+  };
+  const cli = generateCLI(profile);
+  const s = parseCLI(cli);
+  // BF maxRate=70 (70% super rate) must emit roll_srate=70 (no scaling).
+  assertEquals(s.roll_srate, "70", "BETAFLIGHT maxRate 70 must emit roll_srate=70 unchanged");
 });
 
 Deno.test("parseCLI - BETAFLIGHT dump: captures roll_srate key (type-agnostic key capture)", () => {
