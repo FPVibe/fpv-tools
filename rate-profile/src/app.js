@@ -712,7 +712,7 @@ class RateProfileComparison {
       // Build a null-prototype mapping of CLI key → handler to avoid
       // prototype-chain collisions when the dump contains a key like "constructor".
       // Parameter semantics differ by rate type (same CLI key name, different scale):
-      //   ACTUAL:     roll_srate = max rate in deg/s  (0-2000)
+      //   ACTUAL:     roll_srate = max rate in deg/s  (200-2000)
       //   BETAFLIGHT: roll_srate = super rate percent (0-100)
       const mapping = Object.create(null);
       mapping.roll_rc_rate = (v) => {

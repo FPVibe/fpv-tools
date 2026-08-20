@@ -239,10 +239,14 @@ Deno.test("generateCLI - BETAFLIGHT profile round-trip: emits roll_srate", () =>
   assertEquals(s.rates_type, "BETAFLIGHT");
 });
 
-Deno.test("generateCLI + parseCLI - BETAFLIGHT import with roll_srate: round-trips maxRate", () => {
-  // This is the core regression test for the BETAFLIGHT import bug:
-  // roll_srate must be parsed for BETAFLIGHT type so the graph formula
-  // receives super_rate=70 (not the ACTUAL default of 670).
+Deno.test("parseCLI - BETAFLIGHT dump: captures roll_srate key (type-agnostic key capture)", () => {
+  // parseCLI is type-agnostic: it captures every `set key = value` line it
+  // sees, regardless of rates_type.  This test confirms roll_srate is not
+  // accidentally filtered out for BETAFLIGHT dumps.
+  //
+  // The actual import mapping (roll_srate → profileObj.rates.roll.maxRate
+  // when ratesType is BETAFLIGHT) lives in app.js and is exercised by
+  // manual / integration testing.  This test guards the parser layer only.
   const bfDump = [
     "set rates_type = BETAFLIGHT",
     "set roll_rc_rate = 150",
