@@ -29,7 +29,7 @@ for (const page of PAGES) {
     assert(html.includes("<fpv-footer"), "missing <fpv-footer> element");
     assert(
       html.includes('sha="__GIT_SHA__"'),
-      "fpv-footer must carry sha=\"__GIT_SHA__\" (replaced at deploy time)",
+      'fpv-footer must carry sha="__GIT_SHA__" (replaced at deploy time)',
     );
   });
 
