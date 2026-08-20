@@ -420,10 +420,11 @@ class RateProfileComparison {
       }
       profileObj.ratesType = ratesType;
 
-      // Parameter names differ by rate type:
-      //   ACTUAL:     roll_srate = max rate in deg/s (roll_rate accepted as fallback)
-      //   BETAFLIGHT: roll_rate  = super rate (0-100 scale)
-      // Use a null-prototype map to avoid prototype-chain collisions.
+      // Build a null-prototype mapping of CLI key → handler to avoid
+      // prototype-chain collisions when the dump contains a key like "constructor".
+      // Parameter semantics differ by rate type (same CLI key name, different scale):
+      //   ACTUAL:     roll_srate = max rate in deg/s  (0-2000)
+      //   BETAFLIGHT: roll_srate = super rate percent (0-100)
       const mapping = Object.create(null);
       mapping.roll_rc_rate = (v) => {
         profileObj.rates.roll.center = parseInt(v);
@@ -455,8 +456,13 @@ class RateProfileComparison {
       mapping.throttle_limit_percent = (v) => {
         profileObj.throttle.limitPercent = normalizeLimitPercent(v);
       };
-      // roll_rate / roll_srate: add both for ACTUAL (srate defined last → wins
-      // when both keys are present); for BETAFLIGHT only roll_rate is relevant.
+      // Both ACTUAL and BETAFLIGHT rate types use `roll_srate` in the Betaflight
+      // CLI for the second rate parameter:
+      //   ACTUAL     → roll_srate = max rate in deg/s (200-2000)
+      //   BETAFLIGHT → roll_srate = super rate percentage (0-100)
+      //
+      // Old firmware / hand-edited dumps may use bare `roll_rate`; map it first
+      // so that `roll_srate` (defined last) wins when both keys appear.
       mapping.roll_rate = (v) => {
         profileObj.rates.roll.maxRate = parseInt(v);
       };
@@ -466,17 +472,15 @@ class RateProfileComparison {
       mapping.yaw_rate = (v) => {
         profileObj.rates.yaw.maxRate = parseInt(v);
       };
-      if (ratesType === "ACTUAL") {
-        mapping.roll_srate = (v) => {
-          profileObj.rates.roll.maxRate = parseInt(v);
-        };
-        mapping.pitch_srate = (v) => {
-          profileObj.rates.pitch.maxRate = parseInt(v);
-        };
-        mapping.yaw_srate = (v) => {
-          profileObj.rates.yaw.maxRate = parseInt(v);
-        };
-      }
+      mapping.roll_srate = (v) => {
+        profileObj.rates.roll.maxRate = parseInt(v);
+      };
+      mapping.pitch_srate = (v) => {
+        profileObj.rates.pitch.maxRate = parseInt(v);
+      };
+      mapping.yaw_srate = (v) => {
+        profileObj.rates.yaw.maxRate = parseInt(v);
+      };
 
       let count = 0;
       for (const [key, handler] of Object.entries(mapping)) {
@@ -508,6 +512,7 @@ class RateProfileComparison {
 
   updateUIFromProfile(profile, profileObj) {
     const axes = ["roll", "pitch", "yaw"];
+    const isBF = profileObj.ratesType === "BETAFLIGHT";
 
     axes.forEach((axis) => {
       // Center
@@ -515,10 +520,20 @@ class RateProfileComparison {
       document.getElementById(`${profile}-${axis}-center-value`).textContent =
         profileObj.rates[axis].center;
 
-      // Max Rate
-      document.getElementById(`${profile}-${axis}-max`).value = profileObj.rates[axis].maxRate;
+      // Max Rate (ACTUAL) / Super Rate (BETAFLIGHT) — different scale, different slider bounds.
+      // Set min/max before value so the browser doesn't clamp a 0-100 super_rate value
+      // against the ACTUAL default min of 200.
+      const maxEl = document.getElementById(`${profile}-${axis}-max`);
+      maxEl.min = isBF ? "0" : "200";
+      maxEl.max = isBF ? "100" : "2000";
+      maxEl.step = isBF ? "1" : "10";
+      maxEl.value = profileObj.rates[axis].maxRate;
       document.getElementById(`${profile}-${axis}-max-value`).textContent =
         profileObj.rates[axis].maxRate;
+      const maxLabel = document.querySelector(`label[for="${profile}-${axis}-max"]`);
+      if (maxLabel) {
+        maxLabel.textContent = isBF ? "Super Rate (0-100):" : "Max Rate (deg/s):";
+      }
 
       // Expo
       document.getElementById(`${profile}-${axis}-expo`).value = profileObj.rates[axis].expo;
