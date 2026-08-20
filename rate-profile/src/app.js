@@ -1,54 +1,67 @@
-import { GraphRenderer } from "./graph-renderer.js";
+import { GraphRenderer, PROFILE_DASH_PATTERNS } from "./graph-renderer.js";
 import { ProfileManager } from "./profile-manager.js";
 import { generateCLI, parseCLI } from "./cli-parser.js";
 import { normalizeLimitPercent, normalizeLimitType } from "./rate-calculator.js";
+
+/** Maximum number of simultaneous profiles. */
+const MAX_PROFILES = 5;
+
+/** Single-letter labels for profiles 0-4. */
+const PROFILE_LABELS = ["A", "B", "C", "D", "E"];
 
 /**
  * Main application controller
  */
 class RateProfileComparison {
   constructor() {
-    // Initialize components
     this.profileManager = new ProfileManager();
     this.graphRenderer = new GraphRenderer(
       document.getElementById("rate-canvas"),
       document.getElementById("throttle-canvas"),
     );
 
-    // Side-by-side renderers (created lazily)
-    this.graphRendererA = null;
-    this.graphRendererB = null;
+    // Side-by-side renderers — rebuilt when entering that view mode
+    this.sideRenderers = [];
 
     // View mode
     this.viewMode = "overlay"; // 'overlay' or 'sidebyside'
     this.minWidthForSideBySide = 1400;
 
-    // Current profiles
-    this.profileA = this.createDefaultProfile("Profile A");
-    this.profileB = this.createDefaultProfile("Profile B");
+    // Profiles array (2 by default, up to MAX_PROFILES)
+    this.profiles = [
+      this.createDefaultProfile("Profile A"),
+      this.createDefaultProfile("Profile B"),
+    ];
+
+    // Per-slot visibility (parallel to profiles array; extra slots stay true for
+    // freshly-added profiles)
+    this.profileVisibility = [true, true, true, true, true];
 
     // Auto-save debounce timer
     this.autoSaveTimer = null;
-    this.autoSaveDelay = 2000; // 2 seconds
+    this.autoSaveDelay = 2000;
 
-    // Initialize UI
+    // Build dynamic DOM, then wire everything up
+    this.buildProfileEditors();
+    this.buildProfileVisibilityToggles();
     this.initializeControls();
     this.initializeVisibilityToggles();
     this.initializeViewMode();
-    this.initializeImportExport();
-    this.initializeProfileActions();
     this.initializeHistory();
     this.initializeGraphCollapse();
 
-    // Check viewport width and update view mode controls
     this.checkViewportWidth();
     window.addEventListener("resize", () => this.checkViewportWidth());
 
-    // Initial render
+    this.updateLegend();
     this.updateGraphs();
     this.updateExports();
     this.renderHistory();
   }
+
+  // ---------------------------------------------------------------------------
+  // Profile creation
+  // ---------------------------------------------------------------------------
 
   createDefaultProfile(name) {
     return {
@@ -68,136 +81,382 @@ class RateProfileComparison {
     };
   }
 
-  initializeControls() {
-    const profiles = ["a", "b"];
+  // ---------------------------------------------------------------------------
+  // Dynamic DOM construction
+  // ---------------------------------------------------------------------------
+
+  /** Rebuild the entire editors section from this.profiles. */
+  buildProfileEditors() {
+    const section = document.getElementById("editors-section");
+    section.innerHTML = "";
+    this.profiles.forEach((_, i) => {
+      section.appendChild(this.createProfileEditorDOM(i));
+    });
+    this.updateAddProfileButton();
+  }
+
+  /** Synchronize the "Add Profile" button presence and label. */
+  updateAddProfileButton() {
+    const existing = document.getElementById("add-profile-btn");
+    if (existing) existing.remove();
+
+    if (this.profiles.length < MAX_PROFILES) {
+      const btn = document.createElement("button");
+      btn.id = "add-profile-btn";
+      btn.className = "btn btn-secondary add-profile-btn";
+      btn.textContent = `+ Add Profile (${this.profiles.length} / ${MAX_PROFILES})`;
+      btn.addEventListener("click", () => this.addProfile());
+      document.getElementById("editors-section").appendChild(btn);
+    }
+  }
+
+  /** Create the DOM element for one profile editor (not yet wired up). */
+  createProfileEditorDOM(i) {
+    const label = PROFILE_LABELS[i];
+    const profile = this.profiles[i];
+    const div = document.createElement("div");
+    div.className = "profile-editor";
+    div.dataset.profileIndex = i;
+
+    const canRemove = i >= 2;
+    div.innerHTML = `
+      <div class="editor-header">
+        <h2>Profile ${label}</h2>
+        <div class="profile-actions">
+          <input type="text" id="profile-${i}-name"
+                 placeholder="Profile Name" class="profile-name-input">
+          <button id="save-profile-${i}" class="btn btn-primary">Save</button>
+          ${canRemove ? `<button id="remove-profile-${i}" class="btn btn-danger btn-small" aria-label="Remove Profile ${label}">✕</button>` : ""}
+        </div>
+      </div>
+
+      <div class="controls-grid">
+        ${["roll", "pitch", "yaw"]
+          .map(
+            (axis) => `
+          <div class="control-section">
+            <h3 class="${axis}-heading">${axis.charAt(0).toUpperCase() + axis.slice(1)}</h3>
+            <div class="control-item">
+              <label for="${i}-${axis}-center">Center (0-255):</label>
+              <input type="range" id="${i}-${axis}-center"
+                     min="0" max="255" step="1"
+                     value="${profile.rates[axis].center}">
+              <span id="${i}-${axis}-center-value" class="value-display">${profile.rates[axis].center}</span>
+            </div>
+            <div class="control-item">
+              <label for="${i}-${axis}-max">Max Rate (deg/s):</label>
+              <input type="range" id="${i}-${axis}-max"
+                     min="200" max="2000" step="10"
+                     value="${profile.rates[axis].maxRate}">
+              <span id="${i}-${axis}-max-value" class="value-display">${profile.rates[axis].maxRate}</span>
+            </div>
+            <div class="control-item">
+              <label for="${i}-${axis}-expo">Expo (0-100):</label>
+              <input type="range" id="${i}-${axis}-expo"
+                     min="0" max="100" step="1"
+                     value="${profile.rates[axis].expo}">
+              <span id="${i}-${axis}-expo-value" class="value-display">${profile.rates[axis].expo}</span>
+            </div>
+          </div>`,
+          )
+          .join("")}
+
+        <div class="control-section">
+          <h3>Throttle</h3>
+          <div class="control-item">
+            <label for="${i}-throttle-mid">Mid Point (0-100):</label>
+            <input type="range" id="${i}-throttle-mid"
+                   min="0" max="100" step="1"
+                   value="${profile.throttle.mid}">
+            <span id="${i}-throttle-mid-value" class="value-display">${profile.throttle.mid}</span>
+          </div>
+          <div class="control-item">
+            <label for="${i}-throttle-expo">Expo (0-100):</label>
+            <input type="range" id="${i}-throttle-expo"
+                   min="0" max="100" step="1"
+                   value="${profile.throttle.expo}">
+            <span id="${i}-throttle-expo-value" class="value-display">${profile.throttle.expo}</span>
+          </div>
+          <div class="control-item">
+            <label for="${i}-throttle-limit-type">Limit Type:</label>
+            <select id="${i}-throttle-limit-type" class="select-input">
+              <option value="OFF"${profile.throttle.limitType === "OFF" ? " selected" : ""}>Off</option>
+              <option value="SCALE"${profile.throttle.limitType === "SCALE" ? " selected" : ""}>Scale</option>
+              <option value="CLIP"${profile.throttle.limitType === "CLIP" ? " selected" : ""}>Clip</option>
+            </select>
+          </div>
+          <div class="control-item">
+            <label for="${i}-throttle-limit-percent">Limit Percent (25-100):</label>
+            <input type="range" id="${i}-throttle-limit-percent"
+                   min="25" max="100" step="1"
+                   value="${profile.throttle.limitPercent}">
+            <span id="${i}-throttle-limit-percent-value" class="value-display">${profile.throttle.limitPercent}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cli-section">
+        <div class="cli-import">
+          <h3>Import from CLI</h3>
+          <textarea id="import-${i}" placeholder="Paste Betaflight CLI dump here…" rows="4"></textarea>
+          <button id="import-btn-${i}" class="btn btn-secondary">Import</button>
+          <span id="import-status-${i}" class="status-message"></span>
+        </div>
+        <div class="cli-export">
+          <h3>Export to CLI</h3>
+          <textarea id="export-${i}" readonly rows="4"></textarea>
+          <button id="copy-btn-${i}" class="btn btn-secondary">Copy</button>
+          <span id="export-status-${i}" class="status-message"></span>
+        </div>
+      </div>
+    `;
+
+    // Set the name value via DOM to avoid quote-injection through innerHTML attribute context.
+    div.querySelector(`#profile-${i}-name`).value = profile.name;
+
+    return div;
+  }
+
+  /** Attach all event listeners for profile slot i. */
+  wireProfileEditor(i) {
+    const profileObj = this.profiles[i];
     const axes = ["roll", "pitch", "yaw"];
 
-    profiles.forEach((profile) => {
-      const profileObj = profile === "a" ? this.profileA : this.profileB;
-
-      // Rate controls
-      axes.forEach((axis) => {
-        // Center
-        const centerInput = document.getElementById(`${profile}-${axis}-center`);
-        const centerValue = document.getElementById(`${profile}-${axis}-center-value`);
-        centerInput.addEventListener("input", (e) => {
-          const value = parseInt(e.target.value);
-          profileObj.rates[axis].center = value;
-          centerValue.textContent = value;
-          this.onProfileChange();
-        });
-
-        // Max Rate
-        const maxInput = document.getElementById(`${profile}-${axis}-max`);
-        const maxValue = document.getElementById(`${profile}-${axis}-max-value`);
-        maxInput.addEventListener("input", (e) => {
-          const value = parseInt(e.target.value);
-          profileObj.rates[axis].maxRate = value;
-          maxValue.textContent = value;
-          this.onProfileChange();
-        });
-
-        // Expo
-        const expoInput = document.getElementById(`${profile}-${axis}-expo`);
-        const expoValue = document.getElementById(`${profile}-${axis}-expo-value`);
-        expoInput.addEventListener("input", (e) => {
-          const value = parseInt(e.target.value);
-          profileObj.rates[axis].expo = value;
-          expoValue.textContent = value;
-          this.onProfileChange();
-        });
-      });
-
-      // Throttle controls
-      const throttleMidInput = document.getElementById(`${profile}-throttle-mid`);
-      const throttleMidValue = document.getElementById(`${profile}-throttle-mid-value`);
-      throttleMidInput.addEventListener("input", (e) => {
-        const value = parseInt(e.target.value);
-        profileObj.throttle.mid = value;
-        throttleMidValue.textContent = value;
+    axes.forEach((axis) => {
+      const centerInput = document.getElementById(`${i}-${axis}-center`);
+      const centerValue = document.getElementById(`${i}-${axis}-center-value`);
+      centerInput.addEventListener("input", (e) => {
+        profileObj.rates[axis].center = parseInt(e.target.value);
+        centerValue.textContent = e.target.value;
         this.onProfileChange();
       });
 
-      const throttleExpoInput = document.getElementById(`${profile}-throttle-expo`);
-      const throttleExpoValue = document.getElementById(`${profile}-throttle-expo-value`);
-      throttleExpoInput.addEventListener("input", (e) => {
-        const value = parseInt(e.target.value);
-        profileObj.throttle.expo = value;
-        throttleExpoValue.textContent = value;
+      const maxInput = document.getElementById(`${i}-${axis}-max`);
+      const maxValue = document.getElementById(`${i}-${axis}-max-value`);
+      maxInput.addEventListener("input", (e) => {
+        profileObj.rates[axis].maxRate = parseInt(e.target.value);
+        maxValue.textContent = e.target.value;
         this.onProfileChange();
       });
 
-      const throttleLimitTypeInput = document.getElementById(`${profile}-throttle-limit-type`);
-      throttleLimitTypeInput.addEventListener("change", (e) => {
-        profileObj.throttle.limitType = e.target.value;
+      const expoInput = document.getElementById(`${i}-${axis}-expo`);
+      const expoValue = document.getElementById(`${i}-${axis}-expo-value`);
+      expoInput.addEventListener("input", (e) => {
+        profileObj.rates[axis].expo = parseInt(e.target.value);
+        expoValue.textContent = e.target.value;
         this.onProfileChange();
       });
+    });
 
-      const throttleLimitPercentInput = document.getElementById(
-        `${profile}-throttle-limit-percent`,
-      );
-      const throttleLimitPercentValue = document.getElementById(
-        `${profile}-throttle-limit-percent-value`,
-      );
-      throttleLimitPercentInput.addEventListener("input", (e) => {
-        const value = parseInt(e.target.value);
-        profileObj.throttle.limitPercent = value;
-        throttleLimitPercentValue.textContent = value;
-        this.onProfileChange();
-      });
+    const throttleMidInput = document.getElementById(`${i}-throttle-mid`);
+    const throttleMidValue = document.getElementById(`${i}-throttle-mid-value`);
+    throttleMidInput.addEventListener("input", (e) => {
+      profileObj.throttle.mid = parseInt(e.target.value);
+      throttleMidValue.textContent = e.target.value;
+      this.onProfileChange();
+    });
+
+    const throttleExpoInput = document.getElementById(`${i}-throttle-expo`);
+    const throttleExpoValue = document.getElementById(`${i}-throttle-expo-value`);
+    throttleExpoInput.addEventListener("input", (e) => {
+      profileObj.throttle.expo = parseInt(e.target.value);
+      throttleExpoValue.textContent = e.target.value;
+      this.onProfileChange();
+    });
+
+    const limitTypeInput = document.getElementById(`${i}-throttle-limit-type`);
+    limitTypeInput.addEventListener("change", (e) => {
+      profileObj.throttle.limitType = e.target.value;
+      this.onProfileChange();
+    });
+
+    const limitPercentInput = document.getElementById(`${i}-throttle-limit-percent`);
+    const limitPercentValue = document.getElementById(`${i}-throttle-limit-percent-value`);
+    limitPercentInput.addEventListener("input", (e) => {
+      profileObj.throttle.limitPercent = parseInt(e.target.value);
+      limitPercentValue.textContent = e.target.value;
+      this.onProfileChange();
+    });
+
+    document.getElementById(`import-btn-${i}`).addEventListener("click", () => {
+      this.importProfile(i);
+    });
+    document.getElementById(`copy-btn-${i}`).addEventListener("click", () => {
+      this.copyExport(i);
+    });
+    document.getElementById(`save-profile-${i}`).addEventListener("click", () => {
+      this.saveProfile(i);
+    });
+    document.getElementById(`profile-${i}-name`).addEventListener("input", (e) => {
+      this.profiles[i].name = e.target.value || `Profile ${PROFILE_LABELS[i]}`;
+      this.updateExports();
+    });
+
+    const removeBtn = document.getElementById(`remove-profile-${i}`);
+    if (removeBtn) {
+      removeBtn.addEventListener("click", () => this.removeProfile(i));
+    }
+  }
+
+  /** Wire all profile editors (called after buildProfileEditors). */
+  initializeControls() {
+    this.profiles.forEach((_, i) => this.wireProfileEditor(i));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Visibility toggles
+  // ---------------------------------------------------------------------------
+
+  /** Rebuild the profile-visibility toggle row from this.profiles. */
+  buildProfileVisibilityToggles() {
+    const container = document.getElementById("profile-visibility-toggles");
+    container.innerHTML = "";
+    this.profiles.forEach((_, i) => {
+      container.appendChild(this.createProfileToggleDOM(i));
     });
   }
 
+  /** Create a single profile-visibility toggle label element. */
+  createProfileToggleDOM(i) {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.id = `toggle-profile-${i}`;
+    checkbox.checked = this.profileVisibility[i] !== false;
+
+    const lineSpan = document.createElement("span");
+    lineSpan.className = "profile-line-indicator";
+    lineSpan.setAttribute("aria-hidden", "true");
+    lineSpan.dataset.profileIndex = i;
+    lineSpan.innerHTML = this.dashPatternSVG(PROFILE_DASH_PATTERNS[i] ?? []);
+
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(` Profile ${PROFILE_LABELS[i]} `));
+    label.appendChild(lineSpan);
+    return label;
+  }
+
+  /** Wire axis + profile visibility checkboxes. */
   initializeVisibilityToggles() {
-    document.getElementById("toggle-profile-a").addEventListener("change", (e) => {
-      this.graphRenderer.setVisibility({ profileA: e.target.checked });
-      this.updateGraphs();
+    // Profile toggles (dynamic, re-wired after rebuild)
+    this.profiles.forEach((_, i) => {
+      const el = document.getElementById(`toggle-profile-${i}`);
+      if (!el) return;
+      el.addEventListener("change", (e) => {
+        this.profileVisibility[i] = e.target.checked;
+        this.syncRendererVisibility();
+        this.updateGraphs();
+      });
     });
 
-    document.getElementById("toggle-profile-b").addEventListener("change", (e) => {
-      this.graphRenderer.setVisibility({ profileB: e.target.checked });
-      this.updateGraphs();
-    });
-
+    // Axis toggles (static)
     document.getElementById("toggle-roll").addEventListener("change", (e) => {
       this.graphRenderer.setVisibility({ roll: e.target.checked });
       this.updateGraphs();
     });
-
     document.getElementById("toggle-pitch").addEventListener("change", (e) => {
       this.graphRenderer.setVisibility({ pitch: e.target.checked });
       this.updateGraphs();
     });
-
     document.getElementById("toggle-yaw").addEventListener("change", (e) => {
       this.graphRenderer.setVisibility({ yaw: e.target.checked });
       this.updateGraphs();
     });
   }
 
-  initializeViewMode() {
-    document.getElementById("view-mode-overlay").addEventListener("change", (e) => {
-      if (e.target.checked) {
-        this.setViewMode("overlay");
-      }
+  /** Push current profileVisibility state into the graph renderer. */
+  syncRendererVisibility() {
+    this.graphRenderer.setVisibility({ profiles: [...this.profileVisibility] });
+    this.sideRenderers.forEach((renderer, i) => {
+      // Each side renderer shows exactly one profile — always visible
+      renderer.setVisibility({ profiles: [true] });
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Add / Remove profiles
+  // ---------------------------------------------------------------------------
+
+  addProfile() {
+    if (this.profiles.length >= MAX_PROFILES) return;
+    const i = this.profiles.length;
+    this.profiles.push(this.createDefaultProfile(`Profile ${PROFILE_LABELS[i]}`));
+    this.profileVisibility[i] = true;
+
+    // Add editor DOM
+    const section = document.getElementById("editors-section");
+    const addBtn = document.getElementById("add-profile-btn");
+    const editorEl = this.createProfileEditorDOM(i);
+    section.insertBefore(editorEl, addBtn || null);
+    this.wireProfileEditor(i);
+
+    // Add visibility toggle
+    const toggleContainer = document.getElementById("profile-visibility-toggles");
+    toggleContainer.appendChild(this.createProfileToggleDOM(i));
+    document.getElementById(`toggle-profile-${i}`).addEventListener("change", (e) => {
+      this.profileVisibility[i] = e.target.checked;
+      this.syncRendererVisibility();
+      this.updateGraphs();
     });
 
+    this.syncRendererVisibility();
+    this.updateAddProfileButton();
+    this.updateLegend();
+
+    // Rebuild side-by-side if active
+    if (this.viewMode === "sidebyside") this.rebuildSideBySide();
+
+    this.updateGraphs();
+    this.updateExports();
+    this.renderHistory();
+  }
+
+  removeProfile(i) {
+    if (i < 2 || this.profiles.length <= 2) return; // A and B are permanent
+    this.profiles.splice(i, 1);
+    this.profileVisibility.splice(i, 1); // keep parallel array in sync
+    // Rebuild everything — simpler than partial DOM surgery
+    this.rebuild();
+  }
+
+  /**
+   * Full DOM rebuild after structural changes (e.g. removeProfile).
+   * Preserves profile data already in this.profiles.
+   */
+  rebuild() {
+    this.buildProfileEditors();
+    this.buildProfileVisibilityToggles();
+    this.initializeControls();
+    this.initializeVisibilityToggles();
+    this.syncRendererVisibility();
+    this.updateLegend();
+
+    if (this.viewMode === "sidebyside") this.rebuildSideBySide();
+
+    this.updateGraphs();
+    this.updateExports();
+    this.renderHistory();
+  }
+
+  // ---------------------------------------------------------------------------
+  // View mode
+  // ---------------------------------------------------------------------------
+
+  initializeViewMode() {
+    document.getElementById("view-mode-overlay").addEventListener("change", (e) => {
+      if (e.target.checked) this.setViewMode("overlay");
+    });
     document.getElementById("view-mode-sidebyside").addEventListener("change", (e) => {
-      if (e.target.checked) {
-        this.setViewMode("sidebyside");
-      }
+      if (e.target.checked) this.setViewMode("sidebyside");
     });
   }
 
   checkViewportWidth() {
     const width = window.innerWidth;
     const viewModeControl = document.getElementById("view-mode-control");
-
     if (width >= this.minWidthForSideBySide) {
-      // Show view mode toggle on wide screens
       viewModeControl.style.display = "";
     } else {
-      // Hide on narrow screens and force overlay mode
       viewModeControl.style.display = "none";
       if (this.viewMode === "sidebyside") {
         document.getElementById("view-mode-overlay").checked = true;
@@ -217,88 +476,122 @@ class RateProfileComparison {
     } else {
       overlayContainer.style.display = "none";
       sideBySideContainer.style.display = "";
-
-      // Initialize side-by-side renderers if not already done
-      if (!this.graphRendererA) {
-        this.graphRendererA = new GraphRenderer(
-          document.getElementById("rate-canvas-a"),
-          document.getElementById("throttle-canvas-a"),
-        );
-      }
-      if (!this.graphRendererB) {
-        this.graphRendererB = new GraphRenderer(
-          document.getElementById("rate-canvas-b"),
-          document.getElementById("throttle-canvas-b"),
-        );
-      }
+      this.rebuildSideBySide();
     }
 
     this.updateGraphs();
   }
 
-  initializeImportExport() {
-    // Profile A
-    document.getElementById("import-btn-a").addEventListener("click", () => {
-      this.importProfile("a");
-    });
+  /**
+   * Dynamically populate the side-by-side container with one column per profile.
+   */
+  rebuildSideBySide() {
+    const container = document.getElementById("graphs-sidebyside");
+    container.innerHTML = "";
+    container.style.gridTemplateColumns = `repeat(${this.profiles.length}, minmax(350px, 1fr))`;
+    this.sideRenderers = [];
 
-    document.getElementById("copy-btn-a").addEventListener("click", () => {
-      this.copyExport("a");
-    });
+    this.profiles.forEach((_, i) => {
+      const label = PROFILE_LABELS[i];
+      const col = document.createElement("div");
+      col.className = "profile-graphs";
+      col.innerHTML = `
+        <h2>Profile ${label}</h2>
+        <div class="graph-panel">
+          <h3 class="graph-panel-heading">
+            <button type="button" class="graph-panel-header" aria-expanded="true">
+              <span>Rate Curves</span>
+              <span class="graph-panel-chevron" aria-hidden="true">▾</span>
+            </button>
+          </h3>
+          <div class="graph-panel-body">
+            <canvas id="rate-canvas-sbs-${i}" width="700" height="400"></canvas>
+          </div>
+        </div>
+        <div class="graph-panel">
+          <h3 class="graph-panel-heading">
+            <button type="button" class="graph-panel-header" aria-expanded="true">
+              <span>Throttle Curve</span>
+              <span class="graph-panel-chevron" aria-hidden="true">▾</span>
+            </button>
+          </h3>
+          <div class="graph-panel-body">
+            <canvas id="throttle-canvas-sbs-${i}" width="700" height="400"></canvas>
+          </div>
+        </div>
+      `;
+      container.appendChild(col);
 
-    // Profile B
-    document.getElementById("import-btn-b").addEventListener("click", () => {
-      this.importProfile("b");
-    });
+      const renderer = new GraphRenderer(
+        document.getElementById(`rate-canvas-sbs-${i}`),
+        document.getElementById(`throttle-canvas-sbs-${i}`),
+      );
+      // Side-by-side shows one profile at full curves — always visible
+      renderer.setVisibility({ profiles: [true], roll: true, pitch: true, yaw: true });
+      this.sideRenderers.push(renderer);
 
-    document.getElementById("copy-btn-b").addEventListener("click", () => {
-      this.copyExport("b");
+      // Wire collapse behaviour for dynamically-created panels
+      col.querySelectorAll(".graph-panel").forEach((panel) => {
+        const header = panel.querySelector(".graph-panel-header");
+        if (!header) return;
+        header.setAttribute("aria-expanded", "true");
+        header.addEventListener("click", () => {
+          const collapsed = panel.classList.toggle("collapsed");
+          header.setAttribute("aria-expanded", String(!collapsed));
+          if (!collapsed) this.updateGraphs();
+        });
+      });
     });
   }
 
-  initializeProfileActions() {
-    // Save Profile A
-    document.getElementById("save-profile-a").addEventListener("click", () => {
-      this.saveProfile("a");
-    });
+  // ---------------------------------------------------------------------------
+  // Legend
+  // ---------------------------------------------------------------------------
 
-    // Save Profile B
-    document.getElementById("save-profile-b").addEventListener("click", () => {
-      this.saveProfile("b");
-    });
+  /** Rebuild the dynamic profile-line portion of the rate-graph legend. */
+  updateLegend() {
+    const legendContainer = document.getElementById("rate-graph-profile-legend");
+    const throttleLegendContainer = document.getElementById("throttle-graph-profile-legend");
+    if (!legendContainer) return;
 
-    // Profile name inputs
-    document.getElementById("profile-a-name").addEventListener("input", (e) => {
-      this.profileA.name = e.target.value || "Profile A";
-      this.updateExports();
-    });
+    legendContainer.innerHTML = this.profiles
+      .map((_, i) => {
+        const label = PROFILE_LABELS[i];
+        const dash = PROFILE_DASH_PATTERNS[i] ?? [];
+        return `<span class="legend-item">
+          ${this.dashPatternSVG(dash)}
+          Profile ${label}
+        </span>`;
+      })
+      .join("");
 
-    document.getElementById("profile-b-name").addEventListener("input", (e) => {
-      this.profileB.name = e.target.value || "Profile B";
-      this.updateExports();
-    });
+    if (throttleLegendContainer) {
+      throttleLegendContainer.innerHTML = this.profiles
+        .map((_, i) => {
+          const label = PROFILE_LABELS[i];
+          const dash = PROFILE_DASH_PATTERNS[i] ?? [];
+          return `<span class="legend-item">
+            ${this.dashPatternSVG(dash, "#00aaff")}
+            Profile ${label}
+          </span>`;
+        })
+        .join("");
+    }
   }
 
-  initializeHistory() {
-    document.getElementById("export-history-btn").addEventListener("click", () => {
-      this.exportHistory();
-    });
-
-    document.getElementById("import-history-btn").addEventListener("click", () => {
-      document.getElementById("history-file-input").click();
-    });
-
-    document.getElementById("history-file-input").addEventListener("change", (e) => {
-      this.importHistoryFromFile(e.target.files[0]);
-    });
-
-    document.getElementById("clear-history-btn").addEventListener("click", () => {
-      if (confirm("Are you sure you want to clear all history? This cannot be undone.")) {
-        this.profileManager.clearAll();
-        this.renderHistory();
-      }
-    });
+  /** Return an inline SVG showing the given dash pattern. */
+  dashPatternSVG(dashPattern, color = "var(--text-secondary)") {
+    const dashAttr = dashPattern.length ? dashPattern.join(",") : "none";
+    return `<svg width="30" height="6" viewBox="0 0 30 6" aria-hidden="true" style="vertical-align:middle">
+      <line x1="0" y1="3" x2="30" y2="3"
+            stroke="${color}" stroke-width="3"
+            stroke-dasharray="${dashAttr}"/>
+    </svg>`;
   }
+
+  // ---------------------------------------------------------------------------
+  // Collapse
+  // ---------------------------------------------------------------------------
 
   initializeGraphCollapse() {
     this.collapseStorageKey = "fpv-rate-graph-collapsed";
@@ -306,9 +599,7 @@ class RateProfileComparison {
 
     document.querySelectorAll(".graph-panel[data-collapse-key]").forEach((panel) => {
       const key = panel.dataset.collapseKey;
-      if (stored[key]) {
-        panel.classList.add("collapsed");
-      }
+      if (stored[key]) panel.classList.add("collapsed");
       const header = panel.querySelector(".graph-panel-header");
       if (!header) return;
       header.setAttribute("aria-expanded", String(!panel.classList.contains("collapsed")));
@@ -316,7 +607,6 @@ class RateProfileComparison {
         const collapsed = panel.classList.toggle("collapsed");
         header.setAttribute("aria-expanded", String(!collapsed));
         this.saveCollapsedState(key, collapsed);
-        // Re-render so the canvas is correctly sized after expanding
         if (!collapsed) this.updateGraphs();
       });
     });
@@ -327,9 +617,7 @@ class RateProfileComparison {
       const raw = localStorage.getItem(this.collapseStorageKey);
       if (!raw) return {};
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed;
-      }
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
       return {};
     } catch {
       return {};
@@ -350,47 +638,51 @@ class RateProfileComparison {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Graph + export updates
+  // ---------------------------------------------------------------------------
+
   onProfileChange() {
-    // Update graphs immediately
     this.updateGraphs();
     this.updateExports();
 
-    // Debounced auto-save
     clearTimeout(this.autoSaveTimer);
     this.autoSaveTimer = setTimeout(() => {
-      // Auto-save only if profile has a custom name
-      if (this.profileA.name && this.profileA.name !== "Profile A") {
-        this.profileManager.saveProfile({ ...this.profileA });
-      }
-      if (this.profileB.name && this.profileB.name !== "Profile B") {
-        this.profileManager.saveProfile({ ...this.profileB });
-      }
+      this.profiles.forEach((profile, i) => {
+        const defaultName = `Profile ${PROFILE_LABELS[i]}`;
+        if (profile.name && profile.name !== defaultName) {
+          this.profileManager.saveProfile({ ...profile });
+        }
+      });
       this.renderHistory();
     }, this.autoSaveDelay);
   }
 
   updateGraphs() {
     if (this.viewMode === "overlay") {
-      this.graphRenderer.render(this.profileA, this.profileB);
+      this.graphRenderer.render(this.profiles);
     } else {
-      // Side-by-side mode - render each profile separately
-      if (this.graphRendererA && this.graphRendererB) {
-        // For side-by-side, we show each profile independently (not overlaid)
-        // So we pass the profile and null for the second profile
-        this.graphRendererA.render(this.profileA, null);
-        this.graphRendererB.render(this.profileB, null);
-      }
+      // Each side-by-side renderer shows exactly one profile
+      this.sideRenderers.forEach((renderer, i) => {
+        if (this.profiles[i]) renderer.render([this.profiles[i]]);
+      });
     }
   }
 
   updateExports() {
-    document.getElementById("export-a").value = generateCLI(this.profileA);
-    document.getElementById("export-b").value = generateCLI(this.profileB);
+    this.profiles.forEach((profile, i) => {
+      const el = document.getElementById(`export-${i}`);
+      if (el) el.value = generateCLI(profile);
+    });
   }
 
-  importProfile(profile) {
-    const textarea = document.getElementById(`import-${profile}`);
-    const statusSpan = document.getElementById(`import-status-${profile}`);
+  // ---------------------------------------------------------------------------
+  // Import
+  // ---------------------------------------------------------------------------
+
+  importProfile(i) {
+    const textarea = document.getElementById(`import-${i}`);
+    const statusSpan = document.getElementById(`import-status-${i}`);
     const text = textarea.value;
 
     if (!text.trim()) {
@@ -400,11 +692,8 @@ class RateProfileComparison {
 
     try {
       const settings = parseCLI(text);
-      const profileObj = profile === "a" ? this.profileA : this.profileB;
+      const profileObj = this.profiles[i];
 
-      // Detect the rates type from the dump.  ACTUAL and BETAFLIGHT are fully
-      // supported.  KISS and QUICK RATES use different formulas we have not
-      // yet implemented, so they are blocked with a clear message.
       const detectedType = (settings.rates_type || "").trim().toUpperCase();
       let ratesType = "ACTUAL";
       if (detectedType === "BETAFLIGHT") {
@@ -490,8 +779,7 @@ class RateProfileComparison {
         }
       }
 
-      // Update UI
-      this.updateUIFromProfile(profile, profileObj);
+      this.updateUIFromProfile(i, profileObj);
       this.updateGraphs();
       this.updateExports();
 
@@ -510,81 +798,93 @@ class RateProfileComparison {
     }
   }
 
-  updateUIFromProfile(profile, profileObj) {
+  updateUIFromProfile(i, profileObj) {
     const axes = ["roll", "pitch", "yaw"];
     const isBF = profileObj.ratesType === "BETAFLIGHT";
 
     axes.forEach((axis) => {
-      // Center
-      document.getElementById(`${profile}-${axis}-center`).value = profileObj.rates[axis].center;
-      document.getElementById(`${profile}-${axis}-center-value`).textContent =
-        profileObj.rates[axis].center;
-
-      // Max Rate (ACTUAL) / Super Rate (BETAFLIGHT) — different scale, different slider bounds.
-      // Set min/max before value so the browser doesn't clamp a 0-100 super_rate value
-      // against the ACTUAL default min of 200.
-      const maxEl = document.getElementById(`${profile}-${axis}-max`);
-      maxEl.min = isBF ? "0" : "200";
-      maxEl.max = isBF ? "100" : "2000";
-      maxEl.step = isBF ? "1" : "10";
-      maxEl.value = profileObj.rates[axis].maxRate;
-      document.getElementById(`${profile}-${axis}-max-value`).textContent =
-        profileObj.rates[axis].maxRate;
-      const maxLabel = document.querySelector(`label[for="${profile}-${axis}-max"]`);
-      if (maxLabel) {
-        maxLabel.textContent = isBF ? "Super Rate (0-100):" : "Max Rate (deg/s):";
+      const centerEl = document.getElementById(`${i}-${axis}-center`);
+      if (centerEl) {
+        centerEl.value = profileObj.rates[axis].center;
+        document.getElementById(`${i}-${axis}-center-value`).textContent =
+          profileObj.rates[axis].center;
       }
-
-      // Expo
-      document.getElementById(`${profile}-${axis}-expo`).value = profileObj.rates[axis].expo;
-      document.getElementById(`${profile}-${axis}-expo-value`).textContent =
-        profileObj.rates[axis].expo;
+      const maxEl = document.getElementById(`${i}-${axis}-max`);
+      if (maxEl) {
+        // Set min/max before value so the browser doesn't clamp a 0-100 super_rate
+        // against the ACTUAL default min of 200.
+        maxEl.min = isBF ? "0" : "200";
+        maxEl.max = isBF ? "100" : "2000";
+        maxEl.step = isBF ? "1" : "10";
+        maxEl.value = profileObj.rates[axis].maxRate;
+        document.getElementById(`${i}-${axis}-max-value`).textContent =
+          profileObj.rates[axis].maxRate;
+        const maxLabel = document.querySelector(`label[for="${i}-${axis}-max"]`);
+        if (maxLabel) {
+          maxLabel.textContent = isBF ? "Super Rate (0-100):" : "Max Rate (deg/s):";
+        }
+      }
+      const expoEl = document.getElementById(`${i}-${axis}-expo`);
+      if (expoEl) {
+        expoEl.value = profileObj.rates[axis].expo;
+        document.getElementById(`${i}-${axis}-expo-value`).textContent =
+          profileObj.rates[axis].expo;
+      }
     });
 
-    // Throttle
-    document.getElementById(`${profile}-throttle-mid`).value = profileObj.throttle.mid;
-    document.getElementById(`${profile}-throttle-mid-value`).textContent = profileObj.throttle.mid;
-    document.getElementById(`${profile}-throttle-expo`).value = profileObj.throttle.expo;
-    document.getElementById(`${profile}-throttle-expo-value`).textContent =
-      profileObj.throttle.expo;
-    document.getElementById(`${profile}-throttle-limit-type`).value =
-      profileObj.throttle.limitType ?? "OFF";
-    const limitPercent = profileObj.throttle.limitPercent ?? 100;
-    document.getElementById(`${profile}-throttle-limit-percent`).value = limitPercent;
-    document.getElementById(`${profile}-throttle-limit-percent-value`).textContent = limitPercent;
+    const midEl = document.getElementById(`${i}-throttle-mid`);
+    if (midEl) {
+      midEl.value = profileObj.throttle.mid;
+      document.getElementById(`${i}-throttle-mid-value`).textContent = profileObj.throttle.mid;
+    }
+    const tExpoEl = document.getElementById(`${i}-throttle-expo`);
+    if (tExpoEl) {
+      tExpoEl.value = profileObj.throttle.expo;
+      document.getElementById(`${i}-throttle-expo-value`).textContent = profileObj.throttle.expo;
+    }
+    const limitTypeEl = document.getElementById(`${i}-throttle-limit-type`);
+    if (limitTypeEl) limitTypeEl.value = profileObj.throttle.limitType ?? "OFF";
+    const limitPctEl = document.getElementById(`${i}-throttle-limit-percent`);
+    if (limitPctEl) {
+      const lp = profileObj.throttle.limitPercent ?? 100;
+      limitPctEl.value = lp;
+      document.getElementById(`${i}-throttle-limit-percent-value`).textContent = lp;
+    }
   }
 
-  async copyExport(profile) {
-    const textarea = document.getElementById(`export-${profile}`);
-    const statusSpan = document.getElementById(`export-status-${profile}`);
+  // ---------------------------------------------------------------------------
+  // Export / copy
+  // ---------------------------------------------------------------------------
 
+  async copyExport(i) {
+    const textarea = document.getElementById(`export-${i}`);
+    const statusSpan = document.getElementById(`export-status-${i}`);
     try {
       await navigator.clipboard.writeText(textarea.value);
       this.showStatus(statusSpan, "Copied to clipboard!", "success");
-    } catch (error) {
-      // Fallback
+    } catch {
       textarea.select();
       document.execCommand("copy");
       this.showStatus(statusSpan, "Copied to clipboard!", "success");
     }
   }
 
-  saveProfile(profile) {
-    const profileObj = profile === "a" ? this.profileA : this.profileB;
-    const nameInput = document.getElementById(`profile-${profile}-name`);
+  // ---------------------------------------------------------------------------
+  // Save / History
+  // ---------------------------------------------------------------------------
 
+  saveProfile(i) {
+    const profileObj = this.profiles[i];
+    const nameInput = document.getElementById(`profile-${i}-name`);
     if (!nameInput.value.trim()) {
       alert("Please enter a profile name before saving.");
       nameInput.focus();
       return;
     }
-
     profileObj.name = nameInput.value;
     this.profileManager.saveProfile({ ...profileObj });
     this.renderHistory();
-
-    // Show feedback
-    const statusSpan = document.getElementById(`export-status-${profile}`);
+    const statusSpan = document.getElementById(`export-status-${i}`);
     this.showStatus(statusSpan, `Profile saved: ${profileObj.name}`, "success");
   }
 
@@ -598,32 +898,38 @@ class RateProfileComparison {
       return;
     }
 
-    historyList.innerHTML = history.map((profile, index) => `
+    // Build "Load to X" buttons for each active profile slot
+    const loadButtons = this.profiles
+      .map(
+        (_, i) =>
+          `<button class="btn btn-small load-to-profile" data-profile-index="${i}">
+            Load to ${PROFILE_LABELS[i]}
+          </button>`,
+      )
+      .join("");
+
+    historyList.innerHTML = history
+      .map(
+        (profile, index) => `
       <div class="history-item" data-index="${index}">
         <div class="history-item-header">
           <h4>${this.escapeHtml(profile.name)}</h4>
           <span class="history-timestamp">${new Date(profile.timestamp).toLocaleString()}</span>
         </div>
         <div class="history-item-actions">
-          <button class="btn btn-small load-to-a" data-timestamp="${profile.timestamp}">Load to A</button>
-          <button class="btn btn-small load-to-b" data-timestamp="${profile.timestamp}">Load to B</button>
+          ${loadButtons.replace(/data-profile-index="(\d+)"/g, (m, pi) => `${m} data-timestamp="${profile.timestamp}"`)}
           <button class="btn btn-small btn-danger delete-profile" data-timestamp="${profile.timestamp}">Delete</button>
         </div>
       </div>
-    `).join("");
+    `,
+      )
+      .join("");
 
-    // Add event listeners
-    historyList.querySelectorAll(".load-to-a").forEach((btn) => {
+    historyList.querySelectorAll(".load-to-profile").forEach((btn) => {
       btn.addEventListener("click", (e) => {
+        const profileIndex = parseInt(e.target.dataset.profileIndex);
         const timestamp = parseInt(e.target.dataset.timestamp);
-        this.loadProfileTo("a", timestamp);
-      });
-    });
-
-    historyList.querySelectorAll(".load-to-b").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        const timestamp = parseInt(e.target.dataset.timestamp);
-        this.loadProfileTo("b", timestamp);
+        this.loadProfileTo(profileIndex, timestamp);
       });
     });
 
@@ -638,24 +944,34 @@ class RateProfileComparison {
     });
   }
 
-  loadProfileTo(target, timestamp) {
+  loadProfileTo(i, timestamp) {
     const history = this.profileManager.getHistory();
     const profile = history.find((p) => p.timestamp === timestamp);
-
     if (!profile) return;
-
-    if (target === "a") {
-      this.profileA = { ...profile };
-      this.updateUIFromProfile("a", this.profileA);
-      document.getElementById("profile-a-name").value = profile.name;
-    } else {
-      this.profileB = { ...profile };
-      this.updateUIFromProfile("b", this.profileB);
-      document.getElementById("profile-b-name").value = profile.name;
-    }
-
+    this.profiles[i] = { ...profile };
+    this.updateUIFromProfile(i, this.profiles[i]);
+    const nameInput = document.getElementById(`profile-${i}-name`);
+    if (nameInput) nameInput.value = profile.name;
     this.updateGraphs();
     this.updateExports();
+  }
+
+  initializeHistory() {
+    document.getElementById("export-history-btn").addEventListener("click", () => {
+      this.exportHistory();
+    });
+    document.getElementById("import-history-btn").addEventListener("click", () => {
+      document.getElementById("history-file-input").click();
+    });
+    document.getElementById("history-file-input").addEventListener("change", (e) => {
+      this.importHistoryFromFile(e.target.files[0]);
+    });
+    document.getElementById("clear-history-btn").addEventListener("click", () => {
+      if (confirm("Are you sure you want to clear all history? This cannot be undone.")) {
+        this.profileManager.clearAll();
+        this.renderHistory();
+      }
+    });
   }
 
   exportHistory() {
@@ -671,7 +987,6 @@ class RateProfileComparison {
 
   importHistoryFromFile(file) {
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -684,6 +999,10 @@ class RateProfileComparison {
     };
     reader.readAsText(file);
   }
+
+  // ---------------------------------------------------------------------------
+  // Utilities
+  // ---------------------------------------------------------------------------
 
   showStatus(element, message, type) {
     element.textContent = message;
