@@ -92,10 +92,12 @@ class FpvFooter extends HTMLElement {
       this.hidden = true;
       return;
     }
+    this.setAttribute("role", "contentinfo");
     const label = document.createTextNode("FPV Tools · ");
     const link = document.createElement("a");
     link.href = `https://github.com/FPVibe/fpv-tools/commit/${sha}`;
     link.textContent = sha;
+    link.setAttribute("aria-label", `View commit ${sha} on GitHub`);
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     link.className = "footer-sha";

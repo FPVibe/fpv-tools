@@ -31,6 +31,10 @@ for (const page of PAGES) {
       html.includes('sha="__GIT_SHA__"'),
       'fpv-footer must carry sha="__GIT_SHA__" (replaced at deploy time)',
     );
+    assert(
+      !html.includes("github.com/cori/fpv-tools/commit/"),
+      "page must not contain legacy cori/fpv-tools commit link (use <fpv-footer> instead)",
+    );
   });
 
   Deno.test(`${page.path} - uses the shared fpv-header component`, async () => {
