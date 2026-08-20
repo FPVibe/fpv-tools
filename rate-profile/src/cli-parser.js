@@ -1,6 +1,67 @@
 import { normalizeLimitPercent, normalizeLimitType } from "./rate-calculator.js";
 
 /**
+ * Parse set commands from a slice of lines into a flat settings map.
+ * Uses a null-prototype object so key-in checks never match inherited properties.
+ * @param {string[]} lines
+ * @returns {Object}
+ */
+function parseSection(lines) {
+  const settings = Object.create(null);
+  for (const line of lines) {
+    const match = line.match(/^\s*(?:set\s+)?([a-z_]+)\s*=\s*(.+?)\s*$/i);
+    if (match) {
+      const key = match[1].toLowerCase();
+      if (!(key in settings)) {
+        settings[key] = match[2].trim();
+      }
+    }
+  }
+  return settings;
+}
+
+/**
+ * Parse all rateprofile sections from a full Betaflight CLI dump.
+ *
+ * A `dump rates` (or `diff all`) output contains one section per rateprofile
+ * slot, each preceded by a `rateprofile N` header line. This function splits
+ * on those boundaries and returns an array of flat settings maps (same shape as
+ * parseCLI), one per rateprofile found, in the order they appear in the dump.
+ * Sections that contain no recognisable `set` commands are omitted.
+ *
+ * @param {string} text - Full CLI dump text
+ * @returns {Array<Object>} One settings map per non-empty rateprofile section
+ */
+export function parseAllRateProfiles(text) {
+  const profiles = [];
+  const lines = text.split(/\r?\n/);
+
+  /** @type {string[]|null} Lines accumulated for the current section, or null if not yet inside one. */
+  let sectionLines = null;
+
+  for (const line of lines) {
+    if (/^rateprofile\s+\d+/i.test(line.trim())) {
+      // Flush the previous section (if any), skipping empty ones.
+      if (sectionLines !== null) {
+        const settings = parseSection(sectionLines);
+        if (Object.keys(settings).length > 0) profiles.push(settings);
+      }
+      sectionLines = [];
+      continue;
+    }
+    if (sectionLines !== null) sectionLines.push(line);
+  }
+
+  // Flush the final section.
+  if (sectionLines !== null) {
+    const settings = parseSection(sectionLines);
+    if (Object.keys(settings).length > 0) profiles.push(settings);
+  }
+
+  return profiles;
+}
+
+/**
  * Parse Betaflight CLI dump format
  * @param {string} text - CLI dump text
  * @returns {Object} Parsed settings as key-value pairs
