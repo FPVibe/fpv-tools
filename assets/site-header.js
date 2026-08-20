@@ -81,3 +81,28 @@ class FpvHeader extends HTMLElement {
 }
 
 customElements.define("fpv-header", FpvHeader);
+
+class FpvFooter extends HTMLElement {
+  connectedCallback() {
+    const sha = this.getAttribute("sha") ?? "";
+    // During local dev the deploy workflow hasn't replaced the placeholder,
+    // so the attribute is still the literal string "__GIT_SHA__". Hide the
+    // footer in that case rather than showing the raw placeholder text.
+    if (!sha || sha === "__GIT_SHA__") {
+      this.hidden = true;
+      return;
+    }
+    this.setAttribute("role", "contentinfo");
+    const label = document.createTextNode("FPV Tools · ");
+    const link = document.createElement("a");
+    link.href = `https://github.com/FPVibe/fpv-tools/commit/${sha}`;
+    link.textContent = sha;
+    link.setAttribute("aria-label", `View commit ${sha} on GitHub`);
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.className = "footer-sha";
+    this.replaceChildren(label, link);
+  }
+}
+
+customElements.define("fpv-footer", FpvFooter);
