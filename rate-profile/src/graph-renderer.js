@@ -182,6 +182,7 @@ export class GraphRenderer {
    * @param {string} color - Curve color
    * @param {number} yMax - Maximum Y value for scaling
    * @param {boolean} dashed - Whether to use dashed line
+   * @param {string} [ratesType='ACTUAL'] - Rate algorithm to use ('ACTUAL' or 'BETAFLIGHT')
    */
   drawRateCurve(ctx, width, height, rates, color, yMax, dashed = false, ratesType = "ACTUAL") {
     const steps = 200;

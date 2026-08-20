@@ -1,5 +1,7 @@
 import { assertAlmostEquals, assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
+  calculateBetaflightRate,
+  calculateRate,
   calculateThrottle,
   normalizeLimitPercent,
   normalizeLimitType,
@@ -133,4 +135,72 @@ Deno.test("normalizeLimitPercent - non-finite values default to 100", () => {
 
 Deno.test("normalizeLimitPercent - coerces numeric strings", () => {
   assertEquals(normalizeLimitPercent("70"), 70);
+});
+
+// ---------------------------------------------------------------------------
+// calculateBetaflightRate
+// ---------------------------------------------------------------------------
+
+Deno.test("calculateBetaflightRate - zero input returns zero regardless of super-rate", () => {
+  assertAlmostEquals(calculateBetaflightRate(0, 100, 50, 0), 0, 1e-9);
+});
+
+Deno.test("calculateBetaflightRate - full stick, no super-rate, no expo: 200 * rcRate/100", () => {
+  // rate = 100/100 = 1.0; angularVel = 200 * 1.0 * 1 = 200
+  assertAlmostEquals(calculateBetaflightRate(1, 100, 0, 0), 200, 1e-9);
+});
+
+Deno.test("calculateBetaflightRate - full stick with 50% super-rate doubles output", () => {
+  // angularVel = 200; rcFactor = 1/(1 - 1.0*0.5) = 2; result = 400
+  assertAlmostEquals(calculateBetaflightRate(1, 100, 50, 0), 400, 1e-9);
+});
+
+Deno.test("calculateBetaflightRate - negative input is symmetric", () => {
+  const pos = calculateBetaflightRate(1, 100, 50, 0);
+  assertAlmostEquals(calculateBetaflightRate(-1, 100, 50, 0), -pos, 1e-9);
+});
+
+Deno.test("calculateBetaflightRate - RC_RATE_INCREMENTAL applied above rc_rate 200", () => {
+  // rate = 210/100 = 2.1; incremental += 14.54*(2.1-2.0)=1.454; rate=3.554
+  // angularVel = 200 * 3.554 * 1 = 710.8
+  assertAlmostEquals(calculateBetaflightRate(1, 210, 0, 0), 710.8, 1e-6);
+});
+
+Deno.test("calculateBetaflightRate - super-rate uses post-expo absolute value", () => {
+  // At half-stick with expo=50: rcCommandf = 0.5*(0.5*0.5^3 + 0.5) = 0.5*0.5625 = 0.28125
+  // angularVel = 200 * 1.0 * 0.28125 = 56.25
+  // rcFactor (post-expo) = 1/(1 - 0.28125*0.5) = 1/0.859375 ≈ 1.16364
+  // result ≈ 65.455
+  const result = calculateBetaflightRate(0.5, 100, 50, 50);
+  assertAlmostEquals(result, 56.25 / 0.859375, 1e-6);
+});
+
+// ---------------------------------------------------------------------------
+// calculateRate (dispatcher)
+// ---------------------------------------------------------------------------
+
+Deno.test("calculateRate - defaults to ACTUAL algorithm", () => {
+  // At full stick, center=70 (→700 deg/s sensitivity), maxRate=670, expo=0:
+  // centerSensitivity = 700; rate = 1*700 + 1*(670-700) = 670
+  assertAlmostEquals(calculateRate(1, 70, 670, 0), 670, 1e-9);
+});
+
+Deno.test("calculateRate - ACTUAL ratesType uses ACTUAL algorithm", () => {
+  assertAlmostEquals(calculateRate(1, 70, 670, 0, "ACTUAL"), 670, 1e-9);
+});
+
+Deno.test("calculateRate - BETAFLIGHT ratesType uses BETAFLIGHT algorithm", () => {
+  // Same as calculateBetaflightRate(1, 100, 50, 0) = 400
+  assertAlmostEquals(calculateRate(1, 100, 50, 0, "BETAFLIGHT"), 400, 1e-9);
+});
+
+Deno.test("calculateRate - ratesType comparison is case-insensitive", () => {
+  const lower = calculateRate(1, 100, 50, 0, "betaflight");
+  const upper = calculateRate(1, 100, 50, 0, "BETAFLIGHT");
+  assertAlmostEquals(lower, upper, 1e-9);
+});
+
+Deno.test("calculateRate - unknown ratesType falls back to ACTUAL", () => {
+  const actual = calculateRate(1, 70, 670, 0, "ACTUAL");
+  assertAlmostEquals(calculateRate(1, 70, 670, 0, "UNKNOWN"), actual, 1e-9);
 });

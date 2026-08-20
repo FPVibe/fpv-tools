@@ -63,9 +63,10 @@ export function calculateBetaflightRate(rcCommand, rcRate, superRate, expo) {
 
   let angularVel = 200 * rate * rcCommandf;
 
-  // Super-rate factor: boosts rate at high stick deflection
+  // Super-rate factor: boosts rate at high stick deflection.
+  // Uses the post-expo absolute value (matching Betaflight firmware behaviour).
   if (superRate > 0) {
-    const rcFactor = 1 / Math.max(0.01, 1 - rcCommandAbs * (superRate / 100));
+    const rcFactor = 1 / Math.max(0.01, 1 - Math.abs(rcCommandf) * (superRate / 100));
     angularVel *= rcFactor;
   }
 
