@@ -218,7 +218,9 @@ Deno.test("generateCLI - ACTUAL profile round-trip: emits roll_srate", () => {
   assertEquals(s.rates_type, "ACTUAL");
 });
 
-Deno.test("generateCLI - BETAFLIGHT profile round-trip: emits roll_rate", () => {
+Deno.test("generateCLI - BETAFLIGHT profile round-trip: emits roll_srate", () => {
+  // Modern Betaflight (4.x) uses roll_srate for super_rate in BETAFLIGHT mode,
+  // with values in the 0-100 range (percentage, not deg/s).
   const profile = {
     name: "BFTest",
     ratesType: "BETAFLIGHT",
@@ -232,9 +234,29 @@ Deno.test("generateCLI - BETAFLIGHT profile round-trip: emits roll_rate", () => 
   const cli = generateCLI(profile);
   const s = parseCLI(cli);
   assertEquals(s.roll_rc_rate, "100");
-  assertEquals(s.roll_rate, "70", "BETAFLIGHT type must emit roll_rate (super rate)");
+  assertEquals(s.roll_srate, "70", "BETAFLIGHT type must emit roll_srate (super rate, 0-100)");
   assertEquals(s.roll_expo, "20");
   assertEquals(s.rates_type, "BETAFLIGHT");
+});
+
+Deno.test("parseCLI - BETAFLIGHT dump: captures roll_srate key (type-agnostic key capture)", () => {
+  // parseCLI is type-agnostic: it captures every `set key = value` line it
+  // sees, regardless of rates_type.  This test confirms roll_srate is not
+  // accidentally filtered out for BETAFLIGHT dumps.
+  //
+  // The actual import mapping (roll_srate → profileObj.rates.roll.maxRate
+  // when ratesType is BETAFLIGHT) lives in app.js and is exercised by
+  // manual / integration testing.  This test guards the parser layer only.
+  const bfDump = [
+    "set rates_type = BETAFLIGHT",
+    "set roll_rc_rate = 150",
+    "set roll_srate = 70",
+    "set roll_expo = 0",
+  ].join("\n");
+  const s = parseCLI(bfDump);
+  assertEquals(s.rates_type, "BETAFLIGHT");
+  assertEquals(s.roll_rc_rate, "150");
+  assertEquals(s.roll_srate, "70", "roll_srate must be captured for BETAFLIGHT imports");
 });
 
 // ---------------------------------------------------------------------------

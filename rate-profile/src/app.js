@@ -713,15 +713,17 @@ class RateProfileComparison {
     mapping.throttle_limit_percent = (v) => {
       profileObj.throttle.limitPercent = normalizeLimitPercent(v);
     };
-    // For ACTUAL: srate wins over rate (defined last so it overwrites)
+    // Both ACTUAL and BETAFLIGHT use `*_srate` for the second rate parameter.
+    // Old firmware / hand-edited dumps may use bare `*_rate`; map it first so
+    // that `*_srate` (defined last) wins when both keys appear.
+    //   ACTUAL     → roll_srate = max rate in deg/s (200-2000)
+    //   BETAFLIGHT → roll_srate = super rate percentage (0-100)
     mapping.roll_rate = (v) => { profileObj.rates.roll.maxRate = parseInt(v); };
     mapping.pitch_rate = (v) => { profileObj.rates.pitch.maxRate = parseInt(v); };
     mapping.yaw_rate = (v) => { profileObj.rates.yaw.maxRate = parseInt(v); };
-    if (ratesType === "ACTUAL") {
-      mapping.roll_srate = (v) => { profileObj.rates.roll.maxRate = parseInt(v); };
-      mapping.pitch_srate = (v) => { profileObj.rates.pitch.maxRate = parseInt(v); };
-      mapping.yaw_srate = (v) => { profileObj.rates.yaw.maxRate = parseInt(v); };
-    }
+    mapping.roll_srate = (v) => { profileObj.rates.roll.maxRate = parseInt(v); };
+    mapping.pitch_srate = (v) => { profileObj.rates.pitch.maxRate = parseInt(v); };
+    mapping.yaw_srate = (v) => { profileObj.rates.yaw.maxRate = parseInt(v); };
 
     let count = 0;
     for (const [key, handler] of Object.entries(mapping)) {
@@ -852,6 +854,8 @@ class RateProfileComparison {
 
   updateUIFromProfile(i, profileObj) {
     const axes = ["roll", "pitch", "yaw"];
+    const isBF = profileObj.ratesType === "BETAFLIGHT";
+
     axes.forEach((axis) => {
       const centerEl = document.getElementById(`${i}-${axis}-center`);
       if (centerEl) {
@@ -861,9 +865,18 @@ class RateProfileComparison {
       }
       const maxEl = document.getElementById(`${i}-${axis}-max`);
       if (maxEl) {
+        // Set min/max before value so the browser doesn't clamp a 0-100 super_rate
+        // against the ACTUAL default min of 200.
+        maxEl.min = isBF ? "0" : "200";
+        maxEl.max = isBF ? "100" : "2000";
+        maxEl.step = isBF ? "1" : "10";
         maxEl.value = profileObj.rates[axis].maxRate;
         document.getElementById(`${i}-${axis}-max-value`).textContent =
           profileObj.rates[axis].maxRate;
+        const maxLabel = document.querySelector(`label[for="${i}-${axis}-max"]`);
+        if (maxLabel) {
+          maxLabel.textContent = isBF ? "Super Rate (0-100):" : "Max Rate (deg/s):";
+        }
       }
       const expoEl = document.getElementById(`${i}-${axis}-expo`);
       if (expoEl) {

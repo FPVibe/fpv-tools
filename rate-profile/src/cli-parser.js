@@ -97,18 +97,18 @@ export function parseCLI(text) {
 /**
  * Generate Betaflight CLI commands from a profile.
  *
- * Emits the correct parameter name for max rate based on the profile's
- * ratesType:
- *   ACTUAL     → roll_srate  (speed in deg/s)
- *   BETAFLIGHT → roll_rate   (super rate 0-100)
+ * Both ACTUAL and BETAFLIGHT rate types use `roll_srate` / `pitch_srate` /
+ * `yaw_srate` in the Betaflight 4.x CLI.  The value semantics differ:
+ *   ACTUAL     → roll_srate  = max rate in deg/s  (200-2000)
+ *   BETAFLIGHT → roll_srate  = super rate percent (0-100)
  *
  * @param {Object} profile - Profile object with rates and throttle settings
  * @returns {string} CLI commands
  */
 export function generateCLI(profile) {
   const ratesType = (profile.ratesType || "ACTUAL").toUpperCase();
-  // ACTUAL rates → srate parameter; BETAFLIGHT → rate parameter
-  const maxRateParam = ratesType === "BETAFLIGHT" ? "rate" : "srate";
+  // Both ACTUAL and BETAFLIGHT types use the srate parameter name in modern BF.
+  const maxRateParam = "srate";
 
   const commands = [
     "# Betaflight Rate Profile Configuration",
