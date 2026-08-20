@@ -355,27 +355,37 @@ class RateProfileComparison {
       });
     });
 
-    // Axis toggles (static)
+    // Axis toggles (static) — update overlay renderer then sync to side renderers.
     document.getElementById("toggle-roll").addEventListener("change", (e) => {
       this.graphRenderer.setVisibility({ roll: e.target.checked });
+      this.syncRendererVisibility();
       this.updateGraphs();
     });
     document.getElementById("toggle-pitch").addEventListener("change", (e) => {
       this.graphRenderer.setVisibility({ pitch: e.target.checked });
+      this.syncRendererVisibility();
       this.updateGraphs();
     });
     document.getElementById("toggle-yaw").addEventListener("change", (e) => {
       this.graphRenderer.setVisibility({ yaw: e.target.checked });
+      this.syncRendererVisibility();
       this.updateGraphs();
     });
   }
 
-  /** Push current profileVisibility state into the graph renderer. */
+  /**
+   * Push current profileVisibility and axis visibility into all renderers.
+   * Axis visibility is read from the overlay renderer (authoritative source)
+   * and mirrored to every side renderer so calculateMaxRate() and all draw
+   * calls use an identical visibility contract.
+   */
   syncRendererVisibility() {
     this.graphRenderer.setVisibility({ profiles: [...this.profileVisibility] });
-    this.sideRenderers.forEach((renderer, i) => {
-      // Each side renderer shows exactly one profile — always visible
-      renderer.setVisibility({ profiles: [true] });
+    const { roll, pitch, yaw } = this.graphRenderer.visibility;
+    this.sideRenderers.forEach((renderer) => {
+      // Each side renderer shows exactly one profile — always visible.
+      // Mirror axis visibility so its curves and the shared yMax stay consistent.
+      renderer.setVisibility({ profiles: [true], roll, pitch, yaw });
     });
   }
 
@@ -532,8 +542,10 @@ class RateProfileComparison {
         document.getElementById(`rate-canvas-sbs-${i}`),
         document.getElementById(`throttle-canvas-sbs-${i}`),
       );
-      // Side-by-side shows one profile at full curves — always visible
-      renderer.setVisibility({ profiles: [true], roll: true, pitch: true, yaw: true });
+      // Side-by-side shows one profile at full curves — always visible.
+      // Inherit current axis visibility from the overlay renderer.
+      const { roll, pitch, yaw } = this.graphRenderer.visibility;
+      renderer.setVisibility({ profiles: [true], roll, pitch, yaw });
       this.sideRenderers.push(renderer);
 
       // Wire collapse behaviour for dynamically-created panels
@@ -696,11 +708,14 @@ class RateProfileComparison {
         if (this.viewMode !== "overlay") return;
         e.preventDefault();
 
-        // Normalise delta: positive = zoom in, negative = zoom out.
+        // Normalise delta: positive = zoom in (increase factor), negative = zoom out.
+        // Formula: effectiveYMax = globalYMax / overlayYZoomFactor
+        //   factor 1.0 → auto-fit (full range)
+        //   factor 4.0 → yMax/4 displayed (4× zoom in, 25% of range visible)
         const delta = e.deltaY < 0 ? 1 : -1;
-        const STEP = 0.15;
-        const MIN_ZOOM = 0.25; // 4× zoom-in max
-        const MAX_ZOOM = 1.0;  // no zoom-out past auto-fit
+        const STEP = 0.25;
+        const MIN_ZOOM = 1.0; // auto-fit floor — can't zoom out past natural range
+        const MAX_ZOOM = 4.0; // 4× zoom-in ceiling
 
         this.overlayYZoomFactor = Math.min(
           MAX_ZOOM,
