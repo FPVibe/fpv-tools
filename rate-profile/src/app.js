@@ -41,6 +41,9 @@ class RateProfileComparison {
     this.autoSaveTimer = null;
     this.autoSaveDelay = 2000;
 
+    // Y-axis zoom factor for overlay mode (wheel-driven; 1.0 = auto-fit)
+    this.overlayYZoomFactor = 1.0;
+
     // Build dynamic DOM, then wire everything up
     this.buildProfileEditors();
     this.buildProfileVisibilityToggles();
@@ -54,6 +57,7 @@ class RateProfileComparison {
     window.addEventListener("resize", () => this.checkViewportWidth());
 
     this.initializeBulkImport();
+    this.initializeOverlayZoom();
 
     this.updateLegend();
     this.updateGraphs();
@@ -661,14 +665,52 @@ class RateProfileComparison {
   }
 
   updateGraphs() {
+    // Compute global yMax across all profiles so every graph shares the same scale.
+    const globalYMax = this.graphRenderer.calculateMaxRate(this.profiles);
+
     if (this.viewMode === "overlay") {
-      this.graphRenderer.render(this.profiles);
+      // Apply wheel-driven zoom: divide by zoom factor to shrink the visible range
+      // (a larger factor zooms in, showing a smaller range → curves fill the canvas).
+      this.graphRenderer.render(this.profiles, globalYMax / this.overlayYZoomFactor);
     } else {
-      // Each side-by-side renderer shows exactly one profile
+      // Side-by-side: pass the same globalYMax to every per-profile renderer so
+      // all columns use an identical Y-axis scale.
       this.sideRenderers.forEach((renderer, i) => {
-        if (this.profiles[i]) renderer.render([this.profiles[i]]);
+        if (this.profiles[i]) renderer.render([this.profiles[i]], globalYMax);
       });
     }
+  }
+
+  /**
+   * Wire wheel events on the overlay rate canvas to zoom the Y axis.
+   * Scrolling up zooms in (raises the zoom factor); scrolling down zooms out.
+   * Page zoom is suppressed so the browser doesn't intercept the gesture.
+   */
+  initializeOverlayZoom() {
+    const canvas = document.getElementById("rate-canvas");
+    if (!canvas) return;
+
+    canvas.addEventListener(
+      "wheel",
+      (e) => {
+        if (this.viewMode !== "overlay") return;
+        e.preventDefault();
+
+        // Normalise delta: positive = zoom in, negative = zoom out.
+        const delta = e.deltaY < 0 ? 1 : -1;
+        const STEP = 0.15;
+        const MIN_ZOOM = 0.25; // 4× zoom-in max
+        const MAX_ZOOM = 1.0;  // no zoom-out past auto-fit
+
+        this.overlayYZoomFactor = Math.min(
+          MAX_ZOOM,
+          Math.max(MIN_ZOOM, this.overlayYZoomFactor + delta * STEP),
+        );
+
+        this.updateGraphs();
+      },
+      { passive: false },
+    );
   }
 
   updateExports() {

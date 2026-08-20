@@ -306,8 +306,11 @@ export class GraphRenderer {
   /**
    * Render rate comparison graph for all profiles.
    * @param {Object[]} profiles - Array of profile objects
+   * @param {number|null} [yMaxOverride=null] - If provided, use this as the Y-axis ceiling
+   *   instead of computing it from the profiles. Used to share a common scale across
+   *   multiple renderer instances (e.g. side-by-side mode).
    */
-  renderRates(profiles) {
+  renderRates(profiles, yMaxOverride = null) {
     const width = this.rateCanvas.width;
     const height = this.rateCanvas.height;
     const ctx = this.rateCtx;
@@ -316,7 +319,7 @@ export class GraphRenderer {
     this.clearCanvas(ctx, width, height);
     this.drawGrid(ctx, width, height);
 
-    const yMax = this.calculateMaxRate(profiles);
+    const yMax = yMaxOverride !== null ? yMaxOverride : this.calculateMaxRate(profiles);
 
     profiles.forEach((profile, i) => {
       if (!profile || !this.visibility.profiles[i]) return;
@@ -363,9 +366,10 @@ export class GraphRenderer {
   /**
    * Render both graphs for all profiles.
    * @param {Object[]} profiles - Array of profile objects
+   * @param {number|null} [yMaxOverride=null] - Passed through to renderRates for shared scaling.
    */
-  render(profiles) {
-    this.renderRates(profiles);
+  render(profiles, yMaxOverride = null) {
+    this.renderRates(profiles, yMaxOverride);
     this.renderThrottle(profiles);
   }
 }
