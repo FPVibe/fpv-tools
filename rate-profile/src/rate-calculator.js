@@ -28,7 +28,9 @@ export function calculateActualRate(rcCommand, center, maxRate, expo) {
     rcCommandf = rcCommand * (expoNorm * rcCommandAbs * rcCommandAbs + (1 - expoNorm));
   }
 
-  // Center sensitivity: roll_rc_rate / 10 gives deg/s at 100% stick with no super-rate.
+  // Center sensitivity: roll_rc_rate / 10 gives the linear rate slope at center stick
+  // (deg/s per unit stick deflection). Full-stick output is governed by maxRate when
+  // maxRate >= cs; cs controls how quickly rate builds from zero stick.
   const centerSensitivity = center / 10.0;
 
   // Stick movement: the extra rate contribution above center sensitivity.
