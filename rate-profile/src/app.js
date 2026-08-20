@@ -124,8 +124,7 @@ class RateProfileComparison {
         <h2>Profile ${label}</h2>
         <div class="profile-actions">
           <input type="text" id="profile-${i}-name"
-                 placeholder="Profile Name" class="profile-name-input"
-                 value="${this.escapeHtml(profile.name)}">
+                 placeholder="Profile Name" class="profile-name-input">
           <button id="save-profile-${i}" class="btn btn-primary">Save</button>
           ${canRemove ? `<button id="remove-profile-${i}" class="btn btn-danger btn-small" aria-label="Remove Profile ${label}">✕</button>` : ""}
         </div>
@@ -211,6 +210,10 @@ class RateProfileComparison {
         </div>
       </div>
     `;
+
+    // Set the name value via DOM to avoid quote-injection through innerHTML attribute context.
+    div.querySelector(`#profile-${i}-name`).value = profile.name;
+
     return div;
   }
 
@@ -325,6 +328,7 @@ class RateProfileComparison {
     lineSpan.className = "profile-line-indicator";
     lineSpan.setAttribute("aria-hidden", "true");
     lineSpan.dataset.profileIndex = i;
+    lineSpan.innerHTML = this.dashPatternSVG(PROFILE_DASH_PATTERNS[i] ?? []);
 
     label.appendChild(checkbox);
     label.appendChild(document.createTextNode(` Profile ${PROFILE_LABELS[i]} `));
@@ -410,6 +414,7 @@ class RateProfileComparison {
   removeProfile(i) {
     if (i < 2 || this.profiles.length <= 2) return; // A and B are permanent
     this.profiles.splice(i, 1);
+    this.profileVisibility.splice(i, 1); // keep parallel array in sync
     // Rebuild everything — simpler than partial DOM surgery
     this.rebuild();
   }
