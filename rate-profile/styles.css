@@ -248,11 +248,11 @@ body {
   color: var(--border-color);
 }
 
-/* Side-by-Side View */
+/* Side-by-Side View — columns are set dynamically by app.js */
 .graphs-container-sidebyside {
   display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: var(--spacing-xl);
+  overflow-x: auto;
 }
 
 .profile-graphs > h2 {
@@ -305,23 +305,28 @@ body {
 
 /* Profile Editors */
 .editors-section {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: var(--spacing-xl);
   margin-bottom: var(--spacing-xl);
 }
 
-@media (max-width: 1200px) {
-  .editors-section {
-    grid-template-columns: 1fr;
-  }
-}
-
 .profile-editor {
+  flex: 1 1 500px;
+  min-width: min(500px, 100%);
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: var(--spacing-lg);
+}
+
+.add-profile-btn {
+  flex: 1 1 100%;
+  padding: var(--spacing-md) var(--spacing-xl);
+  font-size: 1rem;
+  border-style: dashed;
+  color: var(--text-secondary);
 }
 
 .editor-header {
