@@ -136,6 +136,87 @@ Deno.test("validate - accepts save on its own line as terminator", () => {
   assertEquals(findings.some((f) => f.category === "missing-save"), false);
 });
 
+// ---------------------------------------------------------------------------
+// Regression: issue #21 — false warnings
+// ---------------------------------------------------------------------------
+
+Deno.test("validate - same key in different rateprofiles is not a duplicate (#21)", () => {
+  // roll_rc_rate is a valid setting that appears once per rateprofile.
+  // It must not be flagged as a duplicate across rateprofile scope boundaries.
+  const ctx = buildContext(DUMP_A, DUMP_A);
+  const merged = [
+    "rateprofile 0",
+    "set roll_rc_rate = 100",
+    "set roll_rate = 65",
+    "",
+    "rateprofile 1",
+    "set roll_rc_rate = 140",
+    "set roll_rate = 75",
+    "",
+    "save",
+  ].join("\n");
+  const findings = validate({ mergedText: merged, ...ctx });
+  assertEquals(findings.some((f) => f.category === "duplicate-key"), false);
+});
+
+Deno.test("validate - same key in different profiles is not a duplicate (#21)", () => {
+  // Similarly for profile-scoped settings.
+  const ctx = buildContext(DUMP_A, DUMP_A);
+  const merged = [
+    "profile 0",
+    "set dterm_lpf1_dyn_min_hz = 75",
+    "",
+    "profile 1",
+    "set dterm_lpf1_dyn_min_hz = 90",
+    "",
+    "save",
+  ].join("\n");
+  const findings = validate({ mergedText: merged, ...ctx });
+  assertEquals(findings.some((f) => f.category === "duplicate-key"), false);
+});
+
+Deno.test("validate - true duplicate within same scope is still flagged", () => {
+  // Ensure scope-reset doesn't suppress real same-scope duplicates.
+  const ctx = buildContext(DUMP_A, DUMP_A);
+  const merged = [
+    "rateprofile 0",
+    "set roll_rc_rate = 100",
+    "set roll_rc_rate = 140",
+    "",
+    "save",
+  ].join("\n");
+  const findings = validate({ mergedText: merged, ...ctx });
+  const dup = findings.find((f) => f.category === "duplicate-key");
+  assertEquals(dup !== undefined, true);
+  assertEquals(dup!.key, "roll_rc_rate");
+});
+
+Deno.test("validate - B-only key is not flagged when versions match (#21)", () => {
+  // If both dumps are from the same firmware version, a key that only appears
+  // in B is hardware-specific — not a version-drift issue. Must not warn.
+  const DUMP_B_SAME_VER = `# Betaflight / STM32F745 (S745) 4.4.0 Nov  1 2022 / 01:00:00 (abc)
+batch start
+
+# master
+set gyro_lpf1_static_hz = 0
+set gyro_lpf2_static_hz = 500
+set hardware_specific_key = 1
+
+save`;
+  const ctx = buildContext(DUMP_A, DUMP_B_SAME_VER);
+  const merged = `# master\nset hardware_specific_key = 1\n\nsave`;
+  const findings = validate({ mergedText: merged, ...ctx });
+  assertEquals(findings.some((f) => f.category === "unknown-key"), false);
+});
+
+Deno.test("validate - B-only key IS flagged when versions differ (#21 not regressed)", () => {
+  // When there is a real version mismatch the unknown-key warning must still fire.
+  const ctx = buildContext(DUMP_A, DUMP_B_NEWER);
+  const merged = `# master\nset new_key_added_in_45 = 42\n\nsave`;
+  const findings = validate({ mergedText: merged, ...ctx });
+  assertEquals(findings.some((f) => f.category === "unknown-key"), true);
+});
+
 Deno.test("validate - words starting with 'set' are not treated as set commands", () => {
   const ctx = buildContext(DUMP_A, DUMP_A);
   // settings, setpoint, setup are not the `set` command; they must not
