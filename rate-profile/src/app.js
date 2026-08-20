@@ -813,12 +813,25 @@ class RateProfileComparison {
     const capped = parsed.slice(0, MAX_PROFILES);
     const skipped = parsed.length - capped.length;
 
-    // Build new profiles array (minimum 2 for the UI's A/B assumption)
-    const newProfiles = capped.map((settings, idx) => {
+    // Build new profiles array (minimum 2 for the UI's A/B assumption).
+    // Skip sections with unsupported rates_type and surface an error immediately.
+    const newProfiles = [];
+    for (let idx = 0; idx < capped.length; idx++) {
+      const settings = capped[idx];
       const profileObj = this.createDefaultProfile(`Rateprofile ${idx}`);
-      this._applySettingsToProfile(settings, profileObj);
-      return profileObj;
-    });
+      const result = this._applySettingsToProfile(settings, profileObj);
+      if (result === null) {
+        const detectedType = (settings.rates_type || "").trim().toUpperCase();
+        this.showStatus(
+          statusSpan,
+          `Rateprofile ${idx} uses unsupported type "${detectedType}" — import stopped. ` +
+            `Switch to ACTUAL or BETAFLIGHT in Betaflight Configurator (Rates tab → Type).`,
+          "error",
+        );
+        return;
+      }
+      newProfiles.push(profileObj);
+    }
 
     // Pad to at least 2 if only 1 rateprofile found
     while (newProfiles.length < 2) {
@@ -831,7 +844,7 @@ class RateProfileComparison {
     this.rebuild();
 
     textarea.value = "";
-    const noun = capped.length === 1 ? "rateprofile" : "rateprofiles";
+    const noun = newProfiles.length === 1 ? "rateprofile" : "rateprofiles";
     let msg = `Loaded ${capped.length} ${noun} from dump.`;
     if (skipped > 0) msg += ` (${skipped} skipped — max ${MAX_PROFILES})`;
     this.showStatus(statusSpan, msg, "success");

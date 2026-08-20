@@ -1,8 +1,10 @@
 import { normalizeLimitPercent, normalizeLimitType } from "./rate-calculator.js";
 
 /**
- * Parse set commands from a slice of lines into a flat settings map.
- * Uses a null-prototype object so key-in checks never match inherited properties.
+ * Parse assignment lines from a slice of CLI output into a flat settings map.
+ * Accepts both `set key = value` lines and bare `key = value` lines (the
+ * `set` prefix is optional). Uses a null-prototype object so key-in checks
+ * never match inherited properties.
  * @param {string[]} lines
  * @returns {Object}
  */
