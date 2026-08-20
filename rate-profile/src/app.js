@@ -20,6 +20,9 @@ class RateProfileComparison {
       document.getElementById("throttle-canvas"),
     );
 
+    // Shared localStorage key for all collapse state
+    this.collapseStorageKey = "fpv-rate-graph-collapsed";
+
     // Side-by-side renderers — rebuilt when entering that view mode
     this.sideRenderers = [];
 
@@ -132,83 +135,103 @@ class RateProfileComparison {
         </div>
       </div>
 
-      <div class="controls-grid">
-        ${["roll", "pitch", "yaw"]
-          .map(
-            (axis) => `
-          <div class="control-section">
-            <h3 class="${axis}-heading">${axis.charAt(0).toUpperCase() + axis.slice(1)}</h3>
-            <div class="control-item">
-              <label for="${i}-${axis}-center">Center (0-255):</label>
-              <input type="range" id="${i}-${axis}-center"
-                     min="0" max="255" step="1"
-                     value="${profile.rates[axis].center}">
-              <span id="${i}-${axis}-center-value" class="value-display">${profile.rates[axis].center}</span>
-            </div>
-            <div class="control-item">
-              <label for="${i}-${axis}-max">Max Rate (deg/s):</label>
-              <input type="range" id="${i}-${axis}-max"
-                     min="200" max="2000" step="10"
-                     value="${profile.rates[axis].maxRate}">
-              <span id="${i}-${axis}-max-value" class="value-display">${profile.rates[axis].maxRate}</span>
-            </div>
-            <div class="control-item">
-              <label for="${i}-${axis}-expo">Expo (0-100):</label>
-              <input type="range" id="${i}-${axis}-expo"
-                     min="0" max="100" step="1"
-                     value="${profile.rates[axis].expo}">
-              <span id="${i}-${axis}-expo-value" class="value-display">${profile.rates[axis].expo}</span>
-            </div>
-          </div>`,
-          )
-          .join("")}
+      <div class="collapsible-section" data-collapse-key="profile-${i}-sliders">
+        <h3 class="collapsible-section-heading">
+          <button type="button" class="collapsible-section-header" aria-expanded="true">
+            <span>Rate &amp; Throttle</span>
+            <span class="graph-panel-chevron" aria-hidden="true">▾</span>
+          </button>
+        </h3>
+        <div class="collapsible-section-body">
+          <div class="controls-grid">
+            ${["roll", "pitch", "yaw"]
+              .map(
+                (axis) => `
+            <div class="control-section">
+              <h4 class="${axis}-heading">${axis.charAt(0).toUpperCase() + axis.slice(1)}</h4>
+              <div class="control-item">
+                <label for="${i}-${axis}-center">Center (0-255):</label>
+                <input type="range" id="${i}-${axis}-center"
+                       min="0" max="255" step="1"
+                       value="${profile.rates[axis].center}">
+                <span id="${i}-${axis}-center-value" class="value-display">${profile.rates[axis].center}</span>
+              </div>
+              <div class="control-item">
+                <label for="${i}-${axis}-max">Max Rate (deg/s):</label>
+                <input type="range" id="${i}-${axis}-max"
+                       min="200" max="2000" step="10"
+                       value="${profile.rates[axis].maxRate}">
+                <span id="${i}-${axis}-max-value" class="value-display">${profile.rates[axis].maxRate}</span>
+              </div>
+              <div class="control-item">
+                <label for="${i}-${axis}-expo">Expo (0-100):</label>
+                <input type="range" id="${i}-${axis}-expo"
+                       min="0" max="100" step="1"
+                       value="${profile.rates[axis].expo}">
+                <span id="${i}-${axis}-expo-value" class="value-display">${profile.rates[axis].expo}</span>
+              </div>
+            </div>`,
+              )
+              .join("")}
 
-        <div class="control-section">
-          <h3>Throttle</h3>
-          <div class="control-item">
-            <label for="${i}-throttle-mid">Mid Point (0-100):</label>
-            <input type="range" id="${i}-throttle-mid"
-                   min="0" max="100" step="1"
-                   value="${profile.throttle.mid}">
-            <span id="${i}-throttle-mid-value" class="value-display">${profile.throttle.mid}</span>
-          </div>
-          <div class="control-item">
-            <label for="${i}-throttle-expo">Expo (0-100):</label>
-            <input type="range" id="${i}-throttle-expo"
-                   min="0" max="100" step="1"
-                   value="${profile.throttle.expo}">
-            <span id="${i}-throttle-expo-value" class="value-display">${profile.throttle.expo}</span>
-          </div>
-          <div class="control-item">
-            <label for="${i}-throttle-limit-type">Limit Type:</label>
-            <select id="${i}-throttle-limit-type" class="select-input">
-              <option value="OFF"${profile.throttle.limitType === "OFF" ? " selected" : ""}>Off</option>
-              <option value="SCALE"${profile.throttle.limitType === "SCALE" ? " selected" : ""}>Scale</option>
-              <option value="CLIP"${profile.throttle.limitType === "CLIP" ? " selected" : ""}>Clip</option>
-            </select>
-          </div>
-          <div class="control-item">
-            <label for="${i}-throttle-limit-percent">Limit Percent (25-100):</label>
-            <input type="range" id="${i}-throttle-limit-percent"
-                   min="25" max="100" step="1"
-                   value="${profile.throttle.limitPercent}">
-            <span id="${i}-throttle-limit-percent-value" class="value-display">${profile.throttle.limitPercent}</span>
+            <div class="control-section">
+              <h4>Throttle</h4>
+              <div class="control-item">
+                <label for="${i}-throttle-mid">Mid Point (0-100):</label>
+                <input type="range" id="${i}-throttle-mid"
+                       min="0" max="100" step="1"
+                       value="${profile.throttle.mid}">
+                <span id="${i}-throttle-mid-value" class="value-display">${profile.throttle.mid}</span>
+              </div>
+              <div class="control-item">
+                <label for="${i}-throttle-expo">Expo (0-100):</label>
+                <input type="range" id="${i}-throttle-expo"
+                       min="0" max="100" step="1"
+                       value="${profile.throttle.expo}">
+                <span id="${i}-throttle-expo-value" class="value-display">${profile.throttle.expo}</span>
+              </div>
+              <div class="control-item">
+                <label for="${i}-throttle-limit-type">Limit Type:</label>
+                <select id="${i}-throttle-limit-type" class="select-input">
+                  <option value="OFF"${profile.throttle.limitType === "OFF" ? " selected" : ""}>Off</option>
+                  <option value="SCALE"${profile.throttle.limitType === "SCALE" ? " selected" : ""}>Scale</option>
+                  <option value="CLIP"${profile.throttle.limitType === "CLIP" ? " selected" : ""}>Clip</option>
+                </select>
+              </div>
+              <div class="control-item">
+                <label for="${i}-throttle-limit-percent">Limit Percent (25-100):</label>
+                <input type="range" id="${i}-throttle-limit-percent"
+                       min="25" max="100" step="1"
+                       value="${profile.throttle.limitPercent}">
+                <span id="${i}-throttle-limit-percent-value" class="value-display">${profile.throttle.limitPercent}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="cli-section">
-        <div class="cli-import">
-          <h3>Import from CLI</h3>
-          <textarea id="import-${i}" placeholder="Paste Betaflight CLI dump here…" rows="4"></textarea>
-          <button id="import-btn-${i}" class="btn btn-secondary">Import</button>
-          <span id="import-status-${i}" class="status-message"></span>
-        </div>
-        <div class="cli-export">
-          <h3>Export to CLI</h3>
-          <textarea id="export-${i}" readonly rows="4"></textarea>
-          <button id="copy-btn-${i}" class="btn btn-secondary">Copy</button>
-          <span id="export-status-${i}" class="status-message"></span>
+      <div class="collapsible-section" data-collapse-key="profile-${i}-cli">
+        <h3 class="collapsible-section-heading">
+          <button type="button" class="collapsible-section-header" aria-expanded="true">
+            <span>Import / Export</span>
+            <span class="graph-panel-chevron" aria-hidden="true">▾</span>
+          </button>
+        </h3>
+        <div class="collapsible-section-body">
+          <div class="cli-section">
+            <div class="cli-import">
+              <h4>Import from CLI</h4>
+              <textarea id="import-${i}" placeholder="Paste Betaflight CLI dump here…" rows="4"></textarea>
+              <button id="import-btn-${i}" class="btn btn-secondary">Import</button>
+              <span id="import-status-${i}" class="status-message"></span>
+            </div>
+            <div class="cli-export">
+              <h4>Export to CLI</h4>
+              <textarea id="export-${i}" readonly rows="4"></textarea>
+              <button id="copy-btn-${i}" class="btn btn-secondary">Copy</button>
+              <span id="export-status-${i}" class="status-message"></span>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -297,6 +320,14 @@ class RateProfileComparison {
     const removeBtn = document.getElementById(`remove-profile-${i}`);
     if (removeBtn) {
       removeBtn.addEventListener("click", () => this.removeProfile(i));
+    }
+
+    // Wire collapsible sections (sliders, import/export) for this profile slot
+    const profileDiv = document.querySelector(`.profile-editor[data-profile-index="${i}"]`);
+    if (profileDiv) {
+      profileDiv.querySelectorAll(".collapsible-section[data-collapse-key]").forEach((panel) => {
+        this.wireCollapsible(panel, panel.dataset.collapseKey);
+      });
     }
   }
 
@@ -596,9 +627,10 @@ class RateProfileComparison {
   // ---------------------------------------------------------------------------
 
   initializeGraphCollapse() {
-    this.collapseStorageKey = "fpv-rate-graph-collapsed";
+    // this.collapseStorageKey is already set in the constructor.
     const stored = this.loadCollapsedState();
 
+    // Graph panels need to trigger updateGraphs() when expanded — wired inline.
     document.querySelectorAll(".graph-panel[data-collapse-key]").forEach((panel) => {
       const key = panel.dataset.collapseKey;
       if (stored[key]) panel.classList.add("collapsed");
@@ -611,6 +643,26 @@ class RateProfileComparison {
         this.saveCollapsedState(key, collapsed);
         if (!collapsed) this.updateGraphs();
       });
+    });
+  }
+
+  /**
+   * Wire a generic collapsible section: apply stored state and toggle on click.
+   * The panel element must contain a `.collapsible-section-header` button.
+   * Collapse state is persisted under `key` in localStorage.
+   * @param {HTMLElement} panel
+   * @param {string} key
+   */
+  wireCollapsible(panel, key) {
+    const stored = this.loadCollapsedState();
+    if (stored[key]) panel.classList.add("collapsed");
+    const header = panel.querySelector(".collapsible-section-header");
+    if (!header) return;
+    header.setAttribute("aria-expanded", String(!panel.classList.contains("collapsed")));
+    header.addEventListener("click", () => {
+      const collapsed = panel.classList.toggle("collapsed");
+      header.setAttribute("aria-expanded", String(!collapsed));
+      this.saveCollapsedState(key, collapsed);
     });
   }
 
@@ -781,11 +833,15 @@ class RateProfileComparison {
     }
   }
 
-  /** Wire up the bulk-import UI section. */
+  /** Wire up the bulk-import UI section (button + collapsible header). */
   initializeBulkImport() {
     const btn = document.getElementById("bulk-import-btn");
     if (!btn) return;
     btn.addEventListener("click", () => this.bulkImportFromCLI());
+
+    // Wire the bulk-import section's collapsible header
+    const bulkPanel = document.querySelector(".bulk-import-section[data-collapse-key]");
+    if (bulkPanel) this.wireCollapsible(bulkPanel, bulkPanel.dataset.collapseKey);
   }
 
   /**

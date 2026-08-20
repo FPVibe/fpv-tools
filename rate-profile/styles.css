@@ -182,6 +182,76 @@ body {
   background-color: #1a1a1a;
 }
 
+/* ----- Collapsible sections inside profile editors / bulk-import ---------- */
+
+.collapsible-section {
+  margin-bottom: var(--spacing-lg);
+}
+
+.collapsible-section:last-child {
+  margin-bottom: 0;
+}
+
+.collapsible-section-heading {
+  margin: 0 0 var(--spacing-md);
+  font-size: 1.05rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.collapsible-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 0 0 var(--spacing-sm) 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.collapsible-section-header:hover .graph-panel-chevron {
+  color: var(--text-primary);
+}
+
+.collapsible-section.collapsed .collapsible-section-body {
+  display: none;
+}
+
+.collapsible-section.collapsed .collapsible-section-heading {
+  border-bottom-color: transparent;
+  margin-bottom: 0;
+}
+
+.collapsible-section.collapsed .collapsible-section-header {
+  padding-bottom: 0;
+}
+
+.collapsible-section.collapsed .graph-panel-chevron {
+  transform: rotate(-90deg);
+}
+
+/* bulk-import-section acts as its own collapsible root (not a .collapsible-section) */
+.bulk-import-section.collapsed .collapsible-section-body {
+  display: none;
+}
+
+.bulk-import-section.collapsed .collapsible-section-heading {
+  margin-bottom: 0;
+}
+
+.bulk-import-section.collapsed .collapsible-section-header {
+  padding-bottom: 0;
+}
+
+.bulk-import-section.collapsed .graph-panel-chevron {
+  transform: rotate(-90deg);
+}
+
 .graph-legend {
   display: flex;
   gap: var(--spacing-lg);
@@ -316,7 +386,6 @@ body {
 
 .bulk-import-section h2 {
   margin-top: 0;
-  margin-bottom: var(--spacing-sm);
   font-size: 1.1rem;
 }
 
