@@ -1,6 +1,6 @@
 import { GraphRenderer, PROFILE_DASH_PATTERNS } from "./graph-renderer.js";
 import { ProfileManager } from "./profile-manager.js";
-import { generateCLI, parseCLI } from "./cli-parser.js";
+import { generateCLI, parseAllRateProfiles, parseCLI } from "./cli-parser.js";
 import { normalizeLimitPercent, normalizeLimitType } from "./rate-calculator.js";
 
 /** Maximum number of simultaneous profiles. */
@@ -52,6 +52,8 @@ class RateProfileComparison {
 
     this.checkViewportWidth();
     window.addEventListener("resize", () => this.checkViewportWidth());
+
+    this.initializeBulkImport();
 
     this.updateLegend();
     this.updateGraphs();
@@ -680,6 +682,54 @@ class RateProfileComparison {
   // Import
   // ---------------------------------------------------------------------------
 
+  /**
+   * Apply a flat CLI settings map to a profile object in-place.
+   *
+   * @param {Object} settings - Key-value map from parseCLI / parseAllRateProfiles
+   * @param {Object} profileObj - Profile object to mutate
+   * @returns {{ ratesType: string, count: number }|null} Detected type + applied
+   *   count on success, or null when the rates_type is unsupported.
+   */
+  _applySettingsToProfile(settings, profileObj) {
+    const detectedType = (settings.rates_type || "").trim().toUpperCase();
+    let ratesType = "ACTUAL";
+    if (detectedType === "BETAFLIGHT") {
+      ratesType = "BETAFLIGHT";
+    } else if (detectedType && detectedType !== "ACTUAL") {
+      return null; // unsupported type
+    }
+    profileObj.ratesType = ratesType;
+
+    const mapping = Object.create(null);
+    mapping.roll_rc_rate = (v) => { profileObj.rates.roll.center = parseInt(v); };
+    mapping.pitch_rc_rate = (v) => { profileObj.rates.pitch.center = parseInt(v); };
+    mapping.yaw_rc_rate = (v) => { profileObj.rates.yaw.center = parseInt(v); };
+    mapping.roll_expo = (v) => { profileObj.rates.roll.expo = parseInt(v); };
+    mapping.pitch_expo = (v) => { profileObj.rates.pitch.expo = parseInt(v); };
+    mapping.yaw_expo = (v) => { profileObj.rates.yaw.expo = parseInt(v); };
+    mapping.thr_mid = (v) => { profileObj.throttle.mid = parseInt(v); };
+    mapping.thr_expo = (v) => { profileObj.throttle.expo = parseInt(v); };
+    mapping.throttle_limit_type = (v) => { profileObj.throttle.limitType = normalizeLimitType(v); };
+    mapping.throttle_limit_percent = (v) => {
+      profileObj.throttle.limitPercent = normalizeLimitPercent(v);
+    };
+    // For ACTUAL: srate wins over rate (defined last so it overwrites)
+    mapping.roll_rate = (v) => { profileObj.rates.roll.maxRate = parseInt(v); };
+    mapping.pitch_rate = (v) => { profileObj.rates.pitch.maxRate = parseInt(v); };
+    mapping.yaw_rate = (v) => { profileObj.rates.yaw.maxRate = parseInt(v); };
+    if (ratesType === "ACTUAL") {
+      mapping.roll_srate = (v) => { profileObj.rates.roll.maxRate = parseInt(v); };
+      mapping.pitch_srate = (v) => { profileObj.rates.pitch.maxRate = parseInt(v); };
+      mapping.yaw_srate = (v) => { profileObj.rates.yaw.maxRate = parseInt(v); };
+    }
+
+    let count = 0;
+    for (const [key, handler] of Object.entries(mapping)) {
+      if (settings[key] !== undefined) { handler(settings[key]); count++; }
+    }
+    return { ratesType, count };
+  }
+
   importProfile(i) {
     const textarea = document.getElementById(`import-${i}`);
     const statusSpan = document.getElementById(`import-status-${i}`);
@@ -694,11 +744,9 @@ class RateProfileComparison {
       const settings = parseCLI(text);
       const profileObj = this.profiles[i];
 
-      const detectedType = (settings.rates_type || "").trim().toUpperCase();
-      let ratesType = "ACTUAL";
-      if (detectedType === "BETAFLIGHT") {
-        ratesType = "BETAFLIGHT";
-      } else if (detectedType && detectedType !== "ACTUAL") {
+      const result = this._applySettingsToProfile(settings, profileObj);
+      if (result === null) {
+        const detectedType = (settings.rates_type || "").trim().toUpperCase();
         this.showStatus(
           statusSpan,
           `Import stopped: ${detectedType} rates are not yet supported. ` +
@@ -707,74 +755,12 @@ class RateProfileComparison {
         );
         return;
       }
-      profileObj.ratesType = ratesType;
-
-      const mapping = Object.create(null);
-      mapping.roll_rc_rate = (v) => {
-        profileObj.rates.roll.center = parseInt(v);
-      };
-      mapping.pitch_rc_rate = (v) => {
-        profileObj.rates.pitch.center = parseInt(v);
-      };
-      mapping.yaw_rc_rate = (v) => {
-        profileObj.rates.yaw.center = parseInt(v);
-      };
-      mapping.roll_expo = (v) => {
-        profileObj.rates.roll.expo = parseInt(v);
-      };
-      mapping.pitch_expo = (v) => {
-        profileObj.rates.pitch.expo = parseInt(v);
-      };
-      mapping.yaw_expo = (v) => {
-        profileObj.rates.yaw.expo = parseInt(v);
-      };
-      mapping.thr_mid = (v) => {
-        profileObj.throttle.mid = parseInt(v);
-      };
-      mapping.thr_expo = (v) => {
-        profileObj.throttle.expo = parseInt(v);
-      };
-      mapping.throttle_limit_type = (v) => {
-        profileObj.throttle.limitType = normalizeLimitType(v);
-      };
-      mapping.throttle_limit_percent = (v) => {
-        profileObj.throttle.limitPercent = normalizeLimitPercent(v);
-      };
-      // For ACTUAL: srate wins over rate (defined last)
-      mapping.roll_rate = (v) => {
-        profileObj.rates.roll.maxRate = parseInt(v);
-      };
-      mapping.pitch_rate = (v) => {
-        profileObj.rates.pitch.maxRate = parseInt(v);
-      };
-      mapping.yaw_rate = (v) => {
-        profileObj.rates.yaw.maxRate = parseInt(v);
-      };
-      if (ratesType === "ACTUAL") {
-        mapping.roll_srate = (v) => {
-          profileObj.rates.roll.maxRate = parseInt(v);
-        };
-        mapping.pitch_srate = (v) => {
-          profileObj.rates.pitch.maxRate = parseInt(v);
-        };
-        mapping.yaw_srate = (v) => {
-          profileObj.rates.yaw.maxRate = parseInt(v);
-        };
-      }
-
-      let count = 0;
-      for (const [key, handler] of Object.entries(mapping)) {
-        if (settings[key] !== undefined) {
-          handler(settings[key]);
-          count++;
-        }
-      }
 
       this.updateUIFromProfile(i, profileObj);
       this.updateGraphs();
       this.updateExports();
 
-      if (count === 0) {
+      if (result.count === 0) {
         this.showStatus(
           statusSpan,
           "No recognised rate settings found — check the pasted text.",
@@ -782,11 +768,86 @@ class RateProfileComparison {
         );
       } else {
         textarea.value = "";
-        this.showStatus(statusSpan, `Imported ${count} settings (${ratesType})`, "success");
+        this.showStatus(
+          statusSpan,
+          `Imported ${result.count} settings (${result.ratesType})`,
+          "success",
+        );
       }
     } catch (error) {
       this.showStatus(statusSpan, `Import failed: ${error.message}`, "error");
     }
+  }
+
+  /** Wire up the bulk-import UI section. */
+  initializeBulkImport() {
+    const btn = document.getElementById("bulk-import-btn");
+    if (!btn) return;
+    btn.addEventListener("click", () => this.bulkImportFromCLI());
+  }
+
+  /**
+   * Parse a full CLI dump and replace the current profiles with one profile
+   * per rateprofile section found (capped at MAX_PROFILES, minimum 2).
+   */
+  bulkImportFromCLI() {
+    const textarea = document.getElementById("bulk-import-textarea");
+    const statusSpan = document.getElementById("bulk-import-status");
+    const text = textarea.value;
+
+    if (!text.trim()) {
+      this.showStatus(statusSpan, "Please paste a CLI dump first.", "error");
+      return;
+    }
+
+    const parsed = parseAllRateProfiles(text);
+    if (parsed.length === 0) {
+      this.showStatus(
+        statusSpan,
+        "No rateprofile sections found — paste a full 'dump rates' or 'diff all' output.",
+        "error",
+      );
+      return;
+    }
+
+    const capped = parsed.slice(0, MAX_PROFILES);
+    const skipped = parsed.length - capped.length;
+
+    // Build new profiles array (minimum 2 for the UI's A/B assumption).
+    // Skip sections with unsupported rates_type and surface an error immediately.
+    const newProfiles = [];
+    for (let idx = 0; idx < capped.length; idx++) {
+      const settings = capped[idx];
+      const profileObj = this.createDefaultProfile(`Rateprofile ${idx}`);
+      const result = this._applySettingsToProfile(settings, profileObj);
+      if (result === null) {
+        const detectedType = (settings.rates_type || "").trim().toUpperCase();
+        this.showStatus(
+          statusSpan,
+          `Rateprofile ${idx} uses unsupported type "${detectedType}" — import stopped. ` +
+            `Switch to ACTUAL or BETAFLIGHT in Betaflight Configurator (Rates tab → Type).`,
+          "error",
+        );
+        return;
+      }
+      newProfiles.push(profileObj);
+    }
+
+    // Pad to at least 2 if only 1 rateprofile found
+    while (newProfiles.length < 2) {
+      newProfiles.push(this.createDefaultProfile(`Profile ${PROFILE_LABELS[newProfiles.length]}`));
+    }
+
+    this.profiles = newProfiles;
+    this.profileVisibility = newProfiles.map(() => true);
+
+    this.rebuild();
+
+    textarea.value = "";
+    const noun = newProfiles.length === 1 ? "rateprofile" : "rateprofiles";
+    let msg = `Loaded ${capped.length} ${noun} from dump.`;
+    if (skipped > 0) msg += ` (${skipped} skipped — max ${MAX_PROFILES})`;
+    this.showStatus(statusSpan, msg, "success");
   }
 
   updateUIFromProfile(i, profileObj) {
