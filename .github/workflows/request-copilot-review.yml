@@ -18,4 +18,4 @@ jobs:
           gh api \
             --method POST \
             repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers \
-            --raw-field 'reviewers=["github-copilot[bot]"]'
+            --field 'reviewers[]=github-copilot[bot]'
