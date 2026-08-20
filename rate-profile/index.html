@@ -92,6 +92,22 @@
             <div class="graphs-container-sidebyside" id="graphs-sidebyside" style="display: none;"></div>
         </div>
 
+        <!-- Bulk Import from CLI Dump -->
+        <div class="bulk-import-section">
+            <h2>Bulk Import from CLI Dump</h2>
+            <p class="bulk-import-hint">Paste a full Betaflight CLI dump (<code>dump rates</code> or <code>diff all</code>) to load all rateprofiles at once for side-by-side comparison.</p>
+            <div class="bulk-import-controls">
+                <textarea id="bulk-import-textarea"
+                          placeholder="Paste full CLI dump here…"
+                          rows="5"
+                          aria-label="Full CLI dump for bulk rateprofile import"></textarea>
+                <div class="bulk-import-actions">
+                    <button id="bulk-import-btn" class="btn btn-primary">Import All Rateprofiles</button>
+                    <span id="bulk-import-status" class="status-message" aria-live="polite"></span>
+                </div>
+            </div>
+        </div>
+
         <!-- Profile Editors (populated dynamically by app.js) -->
         <div class="editors-section" id="editors-section"></div>
 
