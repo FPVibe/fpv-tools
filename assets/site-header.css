@@ -39,3 +39,24 @@ fpv-header .back-link:hover {
   border-color: var(--orange, #e07b39);
   color: var(--orange, #e07b39);
 }
+
+/* Site footer — renders the deployed git SHA */
+fpv-footer {
+  display: block;
+  text-align: center;
+  padding: .75rem 1.5rem;
+  font-size: .75rem;
+  color: var(--muted, #6e7681);
+  border-top: 1px solid var(--border, #30363d);
+}
+
+fpv-footer a.footer-sha {
+  color: inherit;
+  text-decoration: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+fpv-footer a.footer-sha:hover {
+  color: var(--orange, #e07b39);
+  text-decoration: underline;
+}
