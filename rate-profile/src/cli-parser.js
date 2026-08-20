@@ -99,8 +99,8 @@ export function parseCLI(text) {
  *
  * Both ACTUAL and BETAFLIGHT rate types use `roll_srate` / `pitch_srate` /
  * `yaw_srate` in the Betaflight 4.x CLI.  The value semantics differ:
- *   ACTUAL     → roll_srate  = max rate in deg/s  (200-2000)
- *   BETAFLIGHT → roll_srate  = super rate percent (0-100)
+ *   ACTUAL     → roll_srate  = raw CLI integer in 1/10 deg/s units (0-255; firmware ×10 → deg/s)
+ *   BETAFLIGHT → roll_srate  = super rate percent (0-100); no unit scaling
  *
  * @param {Object} profile - Profile object with rates and throttle settings
  * @returns {string} CLI commands
@@ -109,6 +109,12 @@ export function generateCLI(profile) {
   const ratesType = (profile.ratesType || "ACTUAL").toUpperCase();
   // Both ACTUAL and BETAFLIGHT types use the srate parameter name in modern BF.
   const maxRateParam = "srate";
+
+  // For ACTUAL rates, the Betaflight CLI stores the max-rate value as 1/10 deg/s
+  // (a UINT8 0-255 that the firmware multiplies by 10 to get deg/s).  The profile
+  // object stores maxRate in deg/s, so divide by 10 before emitting.
+  // For BETAFLIGHT, maxRate is the super-rate percent (0-100); no scaling needed.
+  const encodeSrate = (v) => ratesType === "ACTUAL" ? Math.round(v / 10) : v;
 
   const commands = [
     "# Betaflight Rate Profile Configuration",
@@ -127,17 +133,17 @@ export function generateCLI(profile) {
     "",
     "# Roll Rates",
     `set roll_rc_rate = ${profile.rates.roll.center}`,
-    `set roll_${maxRateParam} = ${profile.rates.roll.maxRate}`,
+    `set roll_${maxRateParam} = ${encodeSrate(profile.rates.roll.maxRate)}`,
     `set roll_expo = ${profile.rates.roll.expo}`,
     "",
     "# Pitch Rates",
     `set pitch_rc_rate = ${profile.rates.pitch.center}`,
-    `set pitch_${maxRateParam} = ${profile.rates.pitch.maxRate}`,
+    `set pitch_${maxRateParam} = ${encodeSrate(profile.rates.pitch.maxRate)}`,
     `set pitch_expo = ${profile.rates.pitch.expo}`,
     "",
     "# Yaw Rates",
     `set yaw_rc_rate = ${profile.rates.yaw.center}`,
-    `set yaw_${maxRateParam} = ${profile.rates.yaw.maxRate}`,
+    `set yaw_${maxRateParam} = ${encodeSrate(profile.rates.yaw.maxRate)}`,
     `set yaw_expo = ${profile.rates.yaw.expo}`,
     "",
     "# Throttle",
