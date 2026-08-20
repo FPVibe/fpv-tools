@@ -304,6 +304,69 @@ body {
 }
 
 /* Profile Editors */
+/* ----- Bulk Import -------------------------------------------------------- */
+
+.bulk-import-section {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+}
+
+.bulk-import-section h2 {
+  margin-top: 0;
+  margin-bottom: var(--spacing-sm);
+  font-size: 1.1rem;
+}
+
+.bulk-import-hint {
+  margin: 0 0 var(--spacing-md);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.bulk-import-hint code {
+  background-color: var(--bg-tertiary, var(--bg-primary));
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+  font-size: 0.85em;
+}
+
+.bulk-import-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.bulk-import-controls textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: var(--spacing-sm);
+  font-family: monospace;
+  font-size: 0.8rem;
+  resize: vertical;
+}
+
+.bulk-import-controls textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.bulk-import-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+/* ----- Editors ------------------------------------------------------------ */
+
 .editors-section {
   display: flex;
   flex-wrap: wrap;

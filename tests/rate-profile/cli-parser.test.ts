@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { generateCLI, parseCLI } from "../../rate-profile/src/cli-parser.js";
+import { generateCLI, parseAllRateProfiles, parseCLI } from "../../rate-profile/src/cli-parser.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -257,4 +257,124 @@ Deno.test("parseCLI - BETAFLIGHT dump: captures roll_srate key (type-agnostic ke
   assertEquals(s.rates_type, "BETAFLIGHT");
   assertEquals(s.roll_rc_rate, "150");
   assertEquals(s.roll_srate, "70", "roll_srate must be captured for BETAFLIGHT imports");
+});
+
+// ---------------------------------------------------------------------------
+// parseAllRateProfiles
+// ---------------------------------------------------------------------------
+
+const DUMP_TWO_RATEPROFILES = `# Betaflight / STM32F7X2 4.5.1
+batch start
+
+rateprofile 0
+
+set rates_type = ACTUAL
+set roll_rc_rate = 70
+set roll_expo = 25
+set roll_rate = 670
+set thr_mid = 50
+
+rateprofile 1
+
+set rates_type = ACTUAL
+set roll_rc_rate = 100
+set roll_expo = 40
+set roll_rate = 800
+set thr_mid = 55
+
+batch end
+save`;
+
+const DUMP_THREE_RATEPROFILES = `# Betaflight / STM32F7X2 4.5.1
+batch start
+
+rateprofile 0
+
+set rates_type = ACTUAL
+set roll_rc_rate = 70
+set roll_rate = 670
+
+rateprofile 1
+
+set rates_type = ACTUAL
+set roll_rc_rate = 100
+set roll_rate = 800
+
+rateprofile 2
+
+set rates_type = ACTUAL
+set roll_rc_rate = 120
+set roll_rate = 900
+
+batch end
+save`;
+
+Deno.test("parseAllRateProfiles - returns empty array when no rateprofile sections", () => {
+  const result = parseAllRateProfiles("set roll_rc_rate = 70\nsave");
+  assertEquals(result.length, 0);
+});
+
+Deno.test("parseAllRateProfiles - returns empty array for empty input", () => {
+  assertEquals(parseAllRateProfiles("").length, 0);
+});
+
+Deno.test("parseAllRateProfiles - single rateprofile section", () => {
+  const result = parseAllRateProfiles(SINGLE_PROFILE_DIFF);
+  assertEquals(result.length, 1);
+  assertEquals(result[0].roll_rc_rate, "70");
+  assertEquals(result[0].roll_rate, "670");
+});
+
+Deno.test("parseAllRateProfiles - returns one entry per rateprofile section", () => {
+  const result = parseAllRateProfiles(DUMP_TWO_RATEPROFILES);
+  assertEquals(result.length, 2);
+});
+
+Deno.test("parseAllRateProfiles - rateprofile 0 settings are correct", () => {
+  const result = parseAllRateProfiles(DUMP_TWO_RATEPROFILES);
+  assertEquals(result[0].roll_rc_rate, "70");
+  assertEquals(result[0].roll_rate, "670");
+  assertEquals(result[0].roll_expo, "25");
+  assertEquals(result[0].thr_mid, "50");
+});
+
+Deno.test("parseAllRateProfiles - rateprofile 1 settings are correct", () => {
+  const result = parseAllRateProfiles(DUMP_TWO_RATEPROFILES);
+  assertEquals(result[1].roll_rc_rate, "100");
+  assertEquals(result[1].roll_rate, "800");
+  assertEquals(result[1].roll_expo, "40");
+  assertEquals(result[1].thr_mid, "55");
+});
+
+Deno.test("parseAllRateProfiles - each section is independent (no value bleed-through)", () => {
+  // rateprofile 0 has thr_mid=50; rateprofile 1 has thr_mid=55.
+  // The values must not bleed from one section into the other.
+  const result = parseAllRateProfiles(DUMP_TWO_RATEPROFILES);
+  assertEquals(result[0].thr_mid, "50");
+  assertEquals(result[1].thr_mid, "55");
+});
+
+Deno.test("parseAllRateProfiles - handles three rateprofile sections", () => {
+  const result = parseAllRateProfiles(DUMP_THREE_RATEPROFILES);
+  assertEquals(result.length, 3);
+  assertEquals(result[0].roll_rc_rate, "70");
+  assertEquals(result[1].roll_rc_rate, "100");
+  assertEquals(result[2].roll_rc_rate, "120");
+});
+
+Deno.test("parseAllRateProfiles - handles CRLF line endings", () => {
+  const crlf = DUMP_TWO_RATEPROFILES.replace(/\n/g, "\r\n");
+  const result = parseAllRateProfiles(crlf);
+  assertEquals(result.length, 2);
+  assertEquals(result[0].roll_rc_rate, "70");
+  assertEquals(result[1].roll_rc_rate, "100");
+});
+
+Deno.test("parseAllRateProfiles - skips empty rateprofile sections (all defaults)", () => {
+  // A section with no set commands (e.g. blank lines only) should not appear.
+  const dumpWithEmptySection = `rateprofile 0\n\nrateprofile 1\n\nset roll_rc_rate = 70\n`;
+  const result = parseAllRateProfiles(dumpWithEmptySection);
+  // rateprofile 0 section is empty; only rateprofile 1 has settings
+  assertEquals(result.length, 1);
+  assertEquals(result[0].roll_rc_rate, "70");
 });
