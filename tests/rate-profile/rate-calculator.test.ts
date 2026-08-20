@@ -180,8 +180,9 @@ Deno.test("calculateBetaflightRate - super-rate uses post-expo absolute value", 
 // ---------------------------------------------------------------------------
 
 Deno.test("calculateRate - defaults to ACTUAL algorithm", () => {
-  // At full stick, center=70 (→700 deg/s sensitivity), maxRate=670, expo=0:
-  // centerSensitivity = 700; rate = 1*700 + 1*(670-700) = 670
+  // At full stick, center=70, maxRate=670, expo=0:
+  // cs = 70/10 = 7; stickMovement = 670-7 = 663
+  // rate = 1 * (7 + 663 * 1) = 670
   assertAlmostEquals(calculateRate(1, 70, 670, 0), 670, 1e-9);
 });
 
@@ -203,4 +204,56 @@ Deno.test("calculateRate - ratesType comparison is case-insensitive", () => {
 Deno.test("calculateRate - unknown ratesType falls back to ACTUAL", () => {
   const actual = calculateRate(1, 70, 670, 0, "ACTUAL");
   assertAlmostEquals(calculateRate(1, 70, 670, 0, "UNKNOWN"), actual, 1e-9);
+});
+
+// ---------------------------------------------------------------------------
+// calculateActualRate — formula correctness tests (regression for #37)
+// ---------------------------------------------------------------------------
+
+Deno.test("calculateActualRate - zero stick always returns zero", () => {
+  // Regardless of params, no stick input → no rate
+  assertAlmostEquals(calculateRate(0, 70, 670, 0), 0, 1e-9);
+  assertAlmostEquals(calculateRate(0, 70, 670, 50), 0, 1e-9);
+});
+
+Deno.test("calculateActualRate - center sensitivity is roll_rc_rate divided by 10", () => {
+  // At vanishingly small stick, rate ≈ rcCommand * cs = rcCommand * (center/10)
+  // Use a small but non-negligible stick value (1% stick, expo=0)
+  // rate = 0.01 * (cs + stickMovement * 0.01) ≈ 0.01 * cs  (stickMovement term is tiny)
+  // cs = 100/10 = 10 → rate ≈ 0.01 * 10 = 0.1  (old code: cs=1000 → 10 — 100× off)
+  const rate = calculateRate(0.01, 100, 670, 0);
+  // stickMovement = 670 - 10 = 660; rate = 0.01*(10 + 660*0.01) = 0.01*16.6 = 0.166
+  assertAlmostEquals(rate, 0.01 * (10 + 660 * 0.01), 1e-9);
+});
+
+Deno.test("calculateActualRate - expo softens center without changing full-stick output", () => {
+  // At full stick (rcCommand=1), expo has no effect on the output
+  const withExpo = calculateRate(1, 70, 670, 50);
+  const noExpo = calculateRate(1, 70, 670, 0);
+  assertAlmostEquals(withExpo, noExpo, 1e-9);
+});
+
+Deno.test("calculateActualRate - expo reduces rate at mid-stick", () => {
+  // At half-stick, expo=50 should give a lower rate than expo=0
+  const withExpo = calculateRate(0.5, 70, 670, 50);
+  const noExpo = calculateRate(0.5, 70, 670, 0);
+  // expo=50 softens center, so mid-stick rate should be lower
+  if (withExpo >= noExpo) {
+    throw new Error(`Expected expo to reduce mid-stick rate: ${withExpo} >= ${noExpo}`);
+  }
+});
+
+Deno.test("calculateActualRate - negative input produces equal-magnitude negative output", () => {
+  const pos = calculateRate(0.5, 70, 670, 30);
+  const neg = calculateRate(-0.5, 70, 670, 30);
+  assertAlmostEquals(neg, -pos, 1e-9);
+});
+
+Deno.test("calculateActualRate - mid-stick with expo=50 matches firmware formula", () => {
+  // rcCommand=0.5, center=70, maxRate=670, expo=50
+  // expoNorm=0.5; rcCommandf = 0.5*(0.5*0.25 + 0.5) = 0.5*0.625 = 0.3125
+  // cs = 70/10 = 7; stickMovement = 670-7 = 663
+  // rate = 0.3125 * (7 + 663*0.5) = 0.3125 * (7 + 331.5) = 0.3125 * 338.5 = 105.78125
+  const expected = 0.3125 * (7 + 663 * 0.5);
+  assertAlmostEquals(calculateRate(0.5, 70, 670, 50), expected, 1e-9);
 });
