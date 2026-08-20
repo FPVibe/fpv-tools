@@ -716,14 +716,15 @@ class RateProfileComparison {
     // Both ACTUAL and BETAFLIGHT use `*_srate` for the second rate parameter.
     // Old firmware / hand-edited dumps may use bare `*_rate`; map it first so
     // that `*_srate` (defined last) wins when both keys appear.
-    //   ACTUAL     → roll_srate = max rate in deg/s (200-2000)
-    //   BETAFLIGHT → roll_srate = super rate percentage (0-100)
+    //   ACTUAL     → roll_srate stores 1/10 deg/s (×10 to get internal deg/s)
+    //   BETAFLIGHT → roll_srate = super rate percentage (0-100); no scaling
     mapping.roll_rate = (v) => { profileObj.rates.roll.maxRate = parseInt(v); };
     mapping.pitch_rate = (v) => { profileObj.rates.pitch.maxRate = parseInt(v); };
     mapping.yaw_rate = (v) => { profileObj.rates.yaw.maxRate = parseInt(v); };
-    mapping.roll_srate = (v) => { profileObj.rates.roll.maxRate = parseInt(v); };
-    mapping.pitch_srate = (v) => { profileObj.rates.pitch.maxRate = parseInt(v); };
-    mapping.yaw_srate = (v) => { profileObj.rates.yaw.maxRate = parseInt(v); };
+    const srateScale = ratesType === "ACTUAL" ? 10 : 1;
+    mapping.roll_srate = (v) => { profileObj.rates.roll.maxRate = parseInt(v) * srateScale; };
+    mapping.pitch_srate = (v) => { profileObj.rates.pitch.maxRate = parseInt(v) * srateScale; };
+    mapping.yaw_srate = (v) => { profileObj.rates.yaw.maxRate = parseInt(v) * srateScale; };
 
     let count = 0;
     for (const [key, handler] of Object.entries(mapping)) {
