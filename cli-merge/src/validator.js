@@ -93,10 +93,22 @@ export function validate({ mergedText, sections = [], versionA, versionB }) {
   const { keysA, keysB } = keySetsFor(sections);
 
   const lines = mergedText.split("\n");
+  // Tracks set keys within the current scope (master / profile N / rateprofile N).
+  // Reset at each scope boundary so the same key name in different profiles
+  // is not flagged as a duplicate.
   const seenKeys = new Map(); // key -> first line index
 
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trim();
+
+    // Betaflight CLI scoping commands: `profile N` and `rateprofile N` start a
+    // new settings scope, so the same key (e.g. roll_rc_rate) can legally
+    // appear once per rateprofile without being a duplicate.
+    if (/^(?:profile|rateprofile)\s+\d+/.test(trimmed)) {
+      seenKeys.clear();
+      continue;
+    }
+
     // Match only the `set` command itself — `set<whitespace>...` — so words
     // like `settings`, `setpoint`, `setup` don't fall into malformed-set.
     if (!/^set\s/.test(trimmed)) continue;
@@ -138,7 +150,9 @@ export function validate({ mergedText, sections = [], versionA, versionB }) {
     }
 
     // Key-drift heuristic: key came from B but A's firmware doesn't know it.
-    if (versionA && !keysA.has(key) && keysB.has(key)) {
+    // Only relevant when the two dumps are from *different* firmware versions;
+    // if versions match, a B-only key is hardware-specific, not a version drift.
+    if (versionA && versionB && versionA !== versionB && !keysA.has(key) && keysB.has(key)) {
       findings.push({
         category: "unknown-key",
         severity: "warning",
