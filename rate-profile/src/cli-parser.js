@@ -99,8 +99,8 @@ export function parseCLI(text) {
  *
  * Both ACTUAL and BETAFLIGHT rate types use `roll_srate` / `pitch_srate` /
  * `yaw_srate` in the Betaflight 4.x CLI.  The value semantics differ:
- *   ACTUAL     → roll_srate  = max rate in deg/s  (200-2000)
- *   BETAFLIGHT → roll_srate  = super rate percent (0-100)
+ *   ACTUAL     → roll_srate  = raw CLI integer in 1/10 deg/s units (0-255; firmware ×10 → deg/s)
+ *   BETAFLIGHT → roll_srate  = super rate percent (0-100); no unit scaling
  *
  * @param {Object} profile - Profile object with rates and throttle settings
  * @returns {string} CLI commands

@@ -241,7 +241,7 @@ Deno.test("generateCLI - BETAFLIGHT profile round-trip: emits roll_srate", () =>
 });
 
 // ---------------------------------------------------------------------------
-// generateCLI — ACTUAL rates: roll_srate ÷10 scaling (regression for #issue)
+// generateCLI — ACTUAL rates: roll_srate ÷10 scaling (regression for PR #45)
 // ---------------------------------------------------------------------------
 
 Deno.test("generateCLI - ACTUAL: maxRate 1100 emits roll_srate 110 (user-reported bug)", () => {

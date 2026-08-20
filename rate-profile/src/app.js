@@ -713,15 +713,18 @@ class RateProfileComparison {
     mapping.throttle_limit_percent = (v) => {
       profileObj.throttle.limitPercent = normalizeLimitPercent(v);
     };
-    // Both ACTUAL and BETAFLIGHT use `*_srate` for the second rate parameter.
-    // Old firmware / hand-edited dumps may use bare `*_rate`; map it first so
-    // that `*_srate` (defined last) wins when both keys appear.
-    //   ACTUAL     → roll_srate stores 1/10 deg/s (×10 to get internal deg/s)
-    //   BETAFLIGHT → roll_srate = super rate percentage (0-100); no scaling
-    mapping.roll_rate = (v) => { profileObj.rates.roll.maxRate = parseInt(v); };
-    mapping.pitch_rate = (v) => { profileObj.rates.pitch.maxRate = parseInt(v); };
-    mapping.yaw_rate = (v) => { profileObj.rates.yaw.maxRate = parseInt(v); };
+    // Both ACTUAL and BETAFLIGHT use `*_srate` for the second rate parameter in
+    // modern Betaflight (4.2+). Old firmware / hand-edited dumps may use bare
+    // `*_rate` instead; `*_rate` is mapped first so that `*_srate` (inserted
+    // last) wins when both keys appear in the same dump.
+    //
+    // Unit scaling (srateScale) is applied to both key forms:
+    //   ACTUAL     → raw CLI integer is 1/10 deg/s; ×10 → internal deg/s
+    //   BETAFLIGHT → value is super rate percent (0-100); srateScale = 1
     const srateScale = ratesType === "ACTUAL" ? 10 : 1;
+    mapping.roll_rate = (v) => { profileObj.rates.roll.maxRate = parseInt(v) * srateScale; };
+    mapping.pitch_rate = (v) => { profileObj.rates.pitch.maxRate = parseInt(v) * srateScale; };
+    mapping.yaw_rate = (v) => { profileObj.rates.yaw.maxRate = parseInt(v) * srateScale; };
     mapping.roll_srate = (v) => { profileObj.rates.roll.maxRate = parseInt(v) * srateScale; };
     mapping.pitch_srate = (v) => { profileObj.rates.pitch.maxRate = parseInt(v) * srateScale; };
     mapping.yaw_srate = (v) => { profileObj.rates.yaw.maxRate = parseInt(v) * srateScale; };
