@@ -231,6 +231,10 @@ body {
   padding-bottom: 0;
 }
 
+.collapsible-section.collapsed .graph-panel-chevron {
+  transform: rotate(-90deg);
+}
+
 /* bulk-import-section acts as its own collapsible root (not a .collapsible-section) */
 .bulk-import-section.collapsed .collapsible-section-body {
   display: none;
@@ -242,6 +246,10 @@ body {
 
 .bulk-import-section.collapsed .collapsible-section-header {
   padding-bottom: 0;
+}
+
+.bulk-import-section.collapsed .graph-panel-chevron {
+  transform: rotate(-90deg);
 }
 
 .graph-legend {
@@ -378,7 +386,6 @@ body {
 
 .bulk-import-section h2 {
   margin-top: 0;
-  margin-bottom: 0;
   font-size: 1.1rem;
 }
 

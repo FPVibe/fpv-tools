@@ -148,7 +148,7 @@ class RateProfileComparison {
               .map(
                 (axis) => `
             <div class="control-section">
-              <h3 class="${axis}-heading">${axis.charAt(0).toUpperCase() + axis.slice(1)}</h3>
+              <h4 class="${axis}-heading">${axis.charAt(0).toUpperCase() + axis.slice(1)}</h4>
               <div class="control-item">
                 <label for="${i}-${axis}-center">Center (0-255):</label>
                 <input type="range" id="${i}-${axis}-center"
@@ -175,7 +175,7 @@ class RateProfileComparison {
               .join("")}
 
             <div class="control-section">
-              <h3>Throttle</h3>
+              <h4>Throttle</h4>
               <div class="control-item">
                 <label for="${i}-throttle-mid">Mid Point (0-100):</label>
                 <input type="range" id="${i}-throttle-mid"
@@ -220,13 +220,13 @@ class RateProfileComparison {
         <div class="collapsible-section-body">
           <div class="cli-section">
             <div class="cli-import">
-              <h3>Import from CLI</h3>
+              <h4>Import from CLI</h4>
               <textarea id="import-${i}" placeholder="Paste Betaflight CLI dump here…" rows="4"></textarea>
               <button id="import-btn-${i}" class="btn btn-secondary">Import</button>
               <span id="import-status-${i}" class="status-message"></span>
             </div>
             <div class="cli-export">
-              <h3>Export to CLI</h3>
+              <h4>Export to CLI</h4>
               <textarea id="export-${i}" readonly rows="4"></textarea>
               <button id="copy-btn-${i}" class="btn btn-secondary">Copy</button>
               <span id="export-status-${i}" class="status-message"></span>
