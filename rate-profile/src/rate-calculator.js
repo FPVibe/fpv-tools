@@ -3,32 +3,41 @@
 const RC_RATE_INCREMENTAL = 14.54;
 
 /**
- * Calculate the actual rate based on Betaflight's Actual Rates algorithm
+ * Calculate the actual rate based on Betaflight's Actual Rates algorithm.
+ *
+ * Matches the firmware implementation in `rates.c`:
+ *   rcCommandf  = rc * (expo * rc² + 1 − expo)   (expo applied to command)
+ *   cs          = roll_rc_rate / 10               (center sensitivity in deg/s)
+ *   stickMove   = MAX(0, maxRate − cs)
+ *   angleRate   = rcCommandf * (cs + stickMove * |rcCommand|)
+ *
  * @param {number} rcCommand - RC stick input from -1 to 1
- * @param {number} center - Center sensitivity (0-255)
- * @param {number} maxRate - Maximum rate in deg/s (200-2000)
- * @param {number} expo - Expo value (0-100)
+ * @param {number} center    - roll_rc_rate CLI value (0-255)
+ * @param {number} maxRate   - Maximum rate in deg/s (200-2000)
+ * @param {number} expo      - Expo value (0-100)
  * @returns {number} Rate in degrees per second
  */
 export function calculateActualRate(rcCommand, center, maxRate, expo) {
   const rcCommandAbs = Math.abs(rcCommand);
 
-  // Apply expo curve
-  let expof;
+  // Apply expo: softens center stick without changing the full-stick output.
+  // rcCommandf = rc * (expo * rc² + (1 − expo))
+  let rcCommandf = rcCommand;
   if (expo > 0) {
-    const expoPower = 3;
-    expof = (expo / 100.0) * Math.pow(rcCommandAbs, expoPower) + rcCommandAbs * (1 - expo / 100.0);
-  } else {
-    expof = rcCommandAbs;
+    const expoNorm = expo / 100.0;
+    rcCommandf = rcCommand * (expoNorm * rcCommandAbs * rcCommandAbs + (1 - expoNorm));
   }
 
-  // Calculate center sensitivity (controls the slope at center stick)
-  const centerSensitivity = center * 10; // center is 0-255, multiply by 10 for deg/s
+  // Center sensitivity: roll_rc_rate / 10 gives the linear rate slope at center stick
+  // (deg/s per unit stick deflection). Full-stick output is governed by maxRate when
+  // maxRate >= cs; cs controls how quickly rate builds from zero stick.
+  const centerSensitivity = center / 10.0;
 
-  // Calculate the rate
-  const rate = rcCommandAbs * centerSensitivity + expof * (maxRate - centerSensitivity);
+  // Stick movement: the extra rate contribution above center sensitivity.
+  const stickMovement = Math.max(0, maxRate - centerSensitivity);
 
-  return rcCommand >= 0 ? rate : -rate;
+  // Combine: expo-adjusted command drives the full curve.
+  return rcCommandf * (centerSensitivity + stickMovement * rcCommandAbs);
 }
 
 /**
