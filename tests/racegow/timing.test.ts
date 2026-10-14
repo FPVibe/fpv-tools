@@ -31,7 +31,7 @@ Deno.test("computeResults - rejects missing marks", () => {
 });
 
 Deno.test("computeResults - rejects out-of-order marks", () => {
-  const r = computeResults({ start: 4.2, l2: 8, l3: 18.57, end: 25.78 }, 30);
+  const r = computeResults({ start: 4.2, l2: 18.57, l3: 8, end: 25.78 }, 30);
   assertStringIncludes(r.errors[0], "order");
 });
 
