@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RaceGOW UTT Helper</title>
+<link rel="stylesheet" href="../assets/site-header.css">
+<style>
+:root {
+  --bg:        #0d1117;
+  --surface:   #161b22;
+  --card:      #21262d;
+  --border:    #30363d;
+  --orange:    #e07b39;
+  --blue:      #58a6ff;
+  --green:     #3fb950;
+  --muted:     #6e7681;
+  --text:      #c9d1d9;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+.container { max-width: 720px; margin: 0 auto; padding: 1.25rem 1rem 2rem; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.card h2 {
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  margin-bottom: .75rem;
+}
+
+.row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+
+label.fld { display: flex; flex-direction: column; gap: .25rem; font-size: .8rem; color: var(--muted); }
+input[type="text"], input[type="number"], input[type="file"] {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: .45rem .6rem;
+  font-size: .85rem;
+}
+input[type="file"] { font-size: .8rem; max-width: 100%; }
+
+video { width: 100%; background: #000; border-radius: 6px; display: block; }
+
+.btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: .6rem .8rem;
+  font-size: .9rem;
+  cursor: pointer;
+  min-width: 3rem;
+  text-align: center;
+  user-select: none;
+}
+.btn:hover { border-color: var(--orange); }
+.btn:active { background: var(--border); }
+.btn.mark { border-color: var(--orange); font-weight: 600; }
+.btn.small { padding: .3rem .5rem; font-size: .75rem; min-width: 0; }
+
+.readout {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .95rem;
+  color: var(--green);
+  margin-left: auto;
+}
+
+.marks { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.mark-cell {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: .6rem;
+}
+.mark-cell .mk-btn { width: 100%; margin-bottom: .4rem; }
+.mark-val {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .82rem;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .4rem;
+}
+.mark-val.set { color: var(--green); }
+
+.results-line {
+  display: flex;
+  justify-content: space-between;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .9rem;
+  padding: .2rem 0;
+}
+.results-line.total { color: var(--green); font-weight: 700; border-top: 1px solid var(--border); margin-top: .35rem; padding-top: .5rem; }
+.error { color: var(--orange); }
+
+pre.cmd {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: .7rem;
+  font-size: .78rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-bottom: .6rem;
+}
+
+.note { font-size: .76rem; color: var(--muted); line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<fpv-header root="../" icon="⏱️" heading="RaceGOW UTT Helper" subtitle="Step frames · mark crossings · get submission numbers"></fpv-header>
+<script type="module" src="../assets/site-header.js"></script>
+
+<div class="container">
+
+  <div class="card">
+    <h2>Clip</h2>
+    <div class="row">
+      <label class="fld">DVR clip (stays on this device)
+        <input type="file" id="file" accept="video/*">
+      </label>
+      <label class="fld">Frame rate (fps)
+        <input type="number" id="fps" value="30" min="1" max="240" step="any" list="fps-list">
+        <datalist id="fps-list">
+          <option value="25"></option>
+          <option value="29.97"></option>
+          <option value="30"></option>
+          <option value="50"></option>
+          <option value="59.94"></option>
+          <option value="60"></option>
+        </datalist>
+      </label>
+      <label class="fld">Filename for the render command
+        <input type="text" id="filename" value="clip.mp4">
+      </label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Video</h2>
+    <video id="vid" controls playsinline preload="auto"></video>
+    <div class="row" style="margin-top:.6rem">
+      <button class="btn" id="b10">−10f</button>
+      <button class="btn" id="b1">−1f</button>
+      <button class="btn" id="bplay">Pause</button>
+      <button class="btn" id="f1">+1f</button>
+      <button class="btn" id="f10">+10f</button>
+      <span class="readout" id="readout">–</span>
+    </div>
+    <p class="note" style="margin-top:.5rem">Arrow keys / , . also step one frame. Pause on the frame where the quad crosses the line.</p>
+  </div>
+
+  <div class="card">
+    <h2>Marks</h2>
+    <div class="marks">
+      <div class="mark-cell"><button class="btn mark mk-btn" data-mark="start">Start (lap 1)</button><div class="mark-val" id="val-start">not set</div></div>
+      <div class="mark-cell"><button class="btn mark mk-btn" data-mark="l2">Lap 2 crossing</button><div class="mark-val" id="val-l2">not set</div></div>
+      <div class="mark-cell"><button class="btn mark mk-btn" data-mark="l3">Lap 3 crossing</button><div class="mark-val" id="val-l3">not set</div></div>
+      <div class="mark-cell"><button class="btn mark mk-btn" data-mark="end">Final crossing</button><div class="mark-val" id="val-end">not set</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Submission numbers</h2>
+    <div id="results"><p class="note">Set all four marks.</p></div>
+  </div>
+
+  <div class="card">
+    <h2>Render command</h2>
+    <pre class="cmd" id="cmd">set all four marks to build the command</pre>
+    <div class="row">
+      <button class="btn" id="copy">Copy</button>
+    </div>
+    <p class="note" style="margin-top:.5rem">
+      Paste this into a shell (or hand it to Hermes) on the machine holding the clip.
+      Times are snapped to the frame grid exactly like the renderer, so these numbers
+      match the burned-in timer. If in doubt about the frame rate, run ffprobe on the clip.
+    </p>
+  </div>
+
+</div>
+
+<script type="module">
+import { buildCommand, computeResults } from "./src/timing.js";
+
+const vid = document.getElementById("vid");
+const fpsInput = document.getElementById("fps");
+const fileInput = document.getElementById("file");
+const filenameInput = document.getElementById("filename");
+const readout = document.getElementById("readout");
+const results = document.getElementById("results");
+const cmdBox = document.getElementById("cmd");
+const copyBtn = document.getElementById("copy");
+
+const marks = { start: null, l2: null, l3: null, end: null };
+const MARK_LABELS = { start: "Start", l2: "Lap 2", l3: "Lap 3", end: "Final" };
+
+const getFps = () => Number(fpsInput.value) || 30;
+
+function stepFrames(n) {
+  vid.pause();
+  updatePlayBtn();
+  const d = Number.isFinite(vid.duration) ? vid.duration : 0;
+  vid.currentTime = Math.min(Math.max(vid.currentTime + n / getFps(), 0), d);
+}
+
+function updatePlayBtn() {
+  document.getElementById("bplay").textContent = vid.paused ? "Play" : "Pause";
+}
+
+function frameIndex() {
+  return Number.isFinite(vid.currentTime) ? Math.round(vid.currentTime * getFps()) : 0;
+}
+
+function renderReadout() {
+  readout.textContent = Number.isFinite(vid.currentTime)
+    ? `${vid.currentTime.toFixed(3)}s · frame ${frameIndex()}`
+    : "–";
+}
+
+function renderMarks() {
+  for (const k of Object.keys(marks)) {
+    const el = document.getElementById("val-" + k);
+    const t = marks[k];
+    if (t === null) {
+      el.textContent = "not set";
+      el.classList.remove("set");
+    } else {
+      el.classList.add("set");
+      el.innerHTML =
+        `<span>${MARK_LABELS[k]}: ${t.toFixed(3)}s</span>` +
+        `<span><button class="btn small" data-jump="${k}">jump</button> ` +
+        `<button class="btn small" data-clear="${k}">✕</button></span>`;
+    }
+  }
+}
+
+function renderResults() {
+  const r = computeResults(marks, getFps());
+  if (r.errors.length > 0) {
+    results.innerHTML = `<p class="note ${r.errors[0].startsWith("marks out") ? "error" : ""}">${r.errors[0]}</p>`;
+    cmdBox.textContent = "set all four marks in order to build the command";
+    return;
+  }
+  results.innerHTML =
+    r.splits.map((s, i) =>
+      `<div class="results-line"><span>Lap ${i + 1}</span><span>${s.toFixed(2)}</span></div>`
+    ).join("") +
+    `<div class="results-line"><span>Hot lap</span><span>${r.hotLap.toFixed(2)}</span></div>` +
+    `<div class="results-line total"><span>Total</span><span>${r.total.toFixed(2)}</span></div>`;
+  cmdBox.textContent = buildCommand(marks, getFps(), filenameInput.value);
+}
+
+function renderAll() { renderReadout(); renderMarks(); renderResults(); }
+
+fileInput.addEventListener("change", () => {
+  const f = fileInput.files[0];
+  if (!f) return;
+  vid.src = URL.createObjectURL(f);
+  filenameInput.value = f.name;
+});
+
+fpsInput.addEventListener("input", renderAll);
+filenameInput.addEventListener("input", renderResults);
+vid.addEventListener("timeupdate", renderReadout);
+vid.addEventListener("play", updatePlayBtn);
+vid.addEventListener("pause", updatePlayBtn);
+
+document.getElementById("b10").addEventListener("click", () => stepFrames(-10));
+document.getElementById("b1").addEventListener("click", () => stepFrames(-1));
+document.getElementById("f1").addEventListener("click", () => stepFrames(1));
+document.getElementById("f10").addEventListener("click", () => stepFrames(10));
+document.getElementById("bplay").addEventListener("click", () => {
+  vid.paused ? vid.play() : vid.pause();
+  updatePlayBtn();
+});
+
+document.querySelectorAll("[data-mark]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if (!Number.isFinite(vid.currentTime)) return;
+    marks[btn.dataset.mark] = vid.currentTime;
+    renderAll();
+  });
+});
+
+document.querySelector(".marks").addEventListener("click", (e) => {
+  const jump = e.target.dataset.jump;
+  const clear = e.target.dataset.clear;
+  if (jump) vid.currentTime = marks[jump];
+  if (clear) { marks[clear] = null; renderAll(); }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.key === "ArrowLeft" || e.key === ",") { e.preventDefault(); stepFrames(-1); }
+  if (e.key === "ArrowRight" || e.key === ".") { e.preventDefault(); stepFrames(1); }
+});
+
+copyBtn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(cmdBox.textContent);
+    copyBtn.textContent = "Copied!";
+  } catch {
+    copyBtn.textContent = "Select + copy manually";
+  }
+  setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+});
+
+vid.addEventListener("loadedmetadata", renderAll);
+</script>
+
+<fpv-footer sha="__GIT_SHA__"></fpv-footer>
+</body>
+</html>
