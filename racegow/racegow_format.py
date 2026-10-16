@@ -100,8 +100,18 @@ def main():
     total = end - start
     hold_to = end + args.hold
 
-    # DVR scaled to 720p height, parked left; rest of 1280 width is the sidebar.
-    sw = int(720 * info["width"] / info["height"]) & ~1  # even width
+    # DVR parked left, capped at 960 px wide so the overlays always have a
+    # sidebar. Wider sources (e.g. 16:9) shrink to the cap, aspect preserved;
+    # narrower ones scale to full 720 height.
+    MAX_DVR_W = 960
+    sw = round(720 * info["width"] / info["height"])
+    if sw > MAX_DVR_W:
+        sw = MAX_DVR_W
+        sh = round(MAX_DVR_W * info["height"] / info["width"]) & ~1
+        scale = f"scale={sw}:{sh}"
+    else:
+        sw &= ~1  # even width for yuv420p
+        scale = f"scale={sw}:720"
     sx = sw + 20
 
     # Overlay texts via textfiles: drawtext expands %{...} per frame, and
@@ -131,7 +141,7 @@ def main():
     # Trim by frame count (inclusive of the end frame) so the frozen frame
     # shows the exact final time; a duration-based trim drops the end frame.
     end_frames = round(end * fps) + 1
-    vf = (f"fps={info['rate']},scale=-2:720,pad=1280:720:0:0:black,"
+    vf = (f"fps={info['rate']},{scale},pad=1280:720:0:0:black,"
           f"{draw},trim=end_frame={end_frames},"
           f"tpad=stop_duration={args.hold}:stop_mode=clone,setpts=PTS-STARTPTS")
 

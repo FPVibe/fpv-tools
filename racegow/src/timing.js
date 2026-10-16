@@ -97,7 +97,9 @@ export function decodeState(hash) {
     const raw = p.get(k);
     if (raw === null) return { present: false, ok: true, value: null };
     if (!/^\d+(\.\d+)?$/.test(raw)) return { present: true, ok: false, value: null };
-    return { present: true, ok: true, value: parseFloat(raw) };
+    const value = parseFloat(raw);
+    if (!Number.isFinite(value)) return { present: true, ok: false, value: null };
+    return { present: true, ok: true, value };
   };
   const fpsTok = num("fps");
   const toks = ["start", "l2", "l3", "end"].map(num);
