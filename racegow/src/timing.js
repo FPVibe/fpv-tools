@@ -45,3 +45,45 @@ export function buildCommand(marks, fps, filename) {
   const q = (k) => quantizeTime(marks[k], fps).toFixed(5);
   return `racegow-format "${name}" --start ${q("start")} --laps ${q("l2")} ${q("l3")} --end ${q("end")}`;
 }
+
+// Parse a command produced by buildCommand back into filename + marks.
+export function parseCommand(text) {
+  const m = text.match(
+    /racegow-format\s+"([^"]+)"\s+--start\s+([\d.]+)\s+--laps\s+([\d.]+)\s+([\d.]+)\s+--end\s+([\d.]+)/,
+  );
+  if (!m) return null;
+  return {
+    filename: m[1],
+    marks: {
+      start: parseFloat(m[2]),
+      l2: parseFloat(m[3]),
+      l3: parseFloat(m[4]),
+      end: parseFloat(m[5]),
+    },
+  };
+}
+
+// URL-hash deep-link state: everything restorable without the video.
+export function encodeState(marks, fps, filename) {
+  const p = new URLSearchParams();
+  if (Number.isFinite(fps)) p.set("fps", fps);
+  if (filename) p.set("file", filename);
+  for (const k of KEYS) {
+    if (Number.isFinite(marks[k])) p.set(k, marks[k].toFixed(5));
+  }
+  return p.toString();
+}
+
+export function decodeState(hash) {
+  const s = (hash || "").replace(/^#/, "");
+  if (!s) return null;
+  const p = new URLSearchParams(s);
+  const num = (k) => {
+    const v = parseFloat(p.get(k));
+    return Number.isFinite(v) ? v : null;
+  };
+  const marks = { start: num("start"), l2: num("l2"), l3: num("l3"), end: num("end") };
+  const meaningful = p.has("fps") || p.get("file") || Object.values(marks).some((v) => v !== null);
+  if (!meaningful) return null;
+  return { fps: num("fps") ?? 30, filename: p.get("file") || "", marks };
+}

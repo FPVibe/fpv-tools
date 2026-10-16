@@ -51,10 +51,10 @@ Deno.test("buildCommand - falls back to a placeholder filename", () => {
 Deno.test("parseCommand - round-trips buildCommand output", () => {
   const parsed = parseCommand(buildCommand(MARKS, 30, "my clip 42.mp4"));
   assertEquals(parsed?.filename, "my clip 42.mp4");
-  assertAlmostEquals(parsed!.marks.start, quantizeTime(MARKS.start, 30));
-  assertAlmostEquals(parsed!.marks.l2, quantizeTime(MARKS.l2, 30));
-  assertAlmostEquals(parsed!.marks.l3, quantizeTime(MARKS.l3, 30));
-  assertAlmostEquals(parsed!.marks.end, quantizeTime(MARKS.end, 30));
+  // command carries 5-decimal frame-grid times — allow that rounding
+  for (const k of ["start", "l2", "l3", "end"] as const) {
+    assertAlmostEquals(parsed!.marks[k], quantizeTime(MARKS[k], 30), 1e-4);
+  }
 });
 
 Deno.test("parseCommand - returns null on garbage", () => {
