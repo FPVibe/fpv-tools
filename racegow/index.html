@@ -154,15 +154,18 @@ pre.cmd {
           <option value="60"></option>
         </datalist>
       </label>
-      <label class="fld">Filename for the render command
+      <label class="fld">Filename or path used in the command
         <input type="text" id="filename" value="clip.mp4">
       </label>
     </div>
+    <p class="note" style="margin-top:.5rem">A browser only exposes the file's name, not its folder — edit to the full path on the machine where the command will run.</p>
+    <p class="note error" id="restore-note" style="display:none;margin-top:.5rem"></p>
   </div>
 
   <div class="card">
     <h2>Video</h2>
-    <video id="vid" controls playsinline preload="auto"></video>
+    <video id="vid" playsinline preload="auto"></video>
+    <input type="range" id="scrub" min="0" max="1000" value="0" disabled style="width:100%;margin-top:.6rem">
     <div class="row" style="margin-top:.6rem">
       <button class="btn" id="b10">−10f</button>
       <button class="btn" id="b1">−1f</button>
@@ -171,7 +174,7 @@ pre.cmd {
       <button class="btn" id="f10">+10f</button>
       <span class="readout" id="readout">–</span>
     </div>
-    <p class="note" style="margin-top:.5rem">Arrow keys / , . also step one frame. Pause on the frame where the quad crosses the line.</p>
+    <p class="note" style="margin-top:.5rem">Arrow keys / , . step one frame; Space plays or pauses; drag the slider for big jumps. Pause on the frame where the quad crosses the line.</p>
   </div>
 
   <div class="card">
@@ -185,6 +188,17 @@ pre.cmd {
   </div>
 
   <div class="card">
+    <h2>Import a previous command</h2>
+    <div class="row">
+      <label class="fld" style="flex:1;min-width:220px">Paste a racegow-format command
+        <input type="text" id="import-cmd" placeholder='racegow-format "clip.mp4" --start 4.2 --laps 11.35 18.57 --end 25.78'>
+      </label>
+      <button class="btn" id="import-btn">Import</button>
+    </div>
+    <p class="note" id="import-msg" style="margin-top:.5rem"></p>
+  </div>
+
+  <div class="card">
     <h2>Submission numbers</h2>
     <div id="results"><p class="note">Set all four marks.</p></div>
   </div>
@@ -193,21 +207,35 @@ pre.cmd {
     <h2>Render command</h2>
     <pre class="cmd" id="cmd">set all four marks to build the command</pre>
     <div class="row">
-      <button class="btn" id="copy">Copy</button>
+      <button class="btn" id="copy">Copy command</button>
+      <button class="btn" id="copy-link">Copy link</button>
     </div>
     <p class="note" style="margin-top:.5rem">
       Paste this into a shell (or hand it to Hermes) on the machine holding the clip.
       Times are snapped to the frame grid exactly like the renderer, so these numbers
       match the burned-in timer. If in doubt about the frame rate, run ffprobe on the clip.
+      The link encodes your marks so you can bookmark or share this exact result.
     </p>
+  </div>
+
+  <div class="card">
+    <h2>The script</h2>
+    <p class="note">The command above runs racegow_format.py (needs ffmpeg installed and on PATH).</p>
+    <div class="row" style="margin:.6rem 0">
+      <a class="btn" href="./racegow_format.py" download>Download racegow_format.py</a>
+    </div>
+    <pre class="cmd">chmod +x racegow_format.py
+mkdir -p ~/.local/bin
+ln -sf "$(pwd)/racegow_format.py" ~/.local/bin/racegow-format</pre>
   </div>
 
 </div>
 
 <script type="module">
-import { buildCommand, computeResults } from "./src/timing.js";
+import { buildCommand, computeResults, decodeState, encodeState, parseCommand } from "./src/timing.js";
 
 const vid = document.getElementById("vid");
+const scrub = document.getElementById("scrub");
 const fpsInput = document.getElementById("fps");
 const fileInput = document.getElementById("file");
 const filenameInput = document.getElementById("filename");
@@ -215,6 +243,11 @@ const readout = document.getElementById("readout");
 const results = document.getElementById("results");
 const cmdBox = document.getElementById("cmd");
 const copyBtn = document.getElementById("copy");
+const copyLinkBtn = document.getElementById("copy-link");
+const importInput = document.getElementById("import-cmd");
+const importBtn = document.getElementById("import-btn");
+const importMsg = document.getElementById("import-msg");
+const restoreNote = document.getElementById("restore-note");
 
 const marks = { start: null, l2: null, l3: null, end: null };
 const MARK_LABELS = { start: "Start", l2: "Lap 2", l3: "Lap 3", end: "Final" };
@@ -259,7 +292,12 @@ function renderMarks() {
   }
 }
 
+function updateHash() {
+  history.replaceState(null, "", "#" + encodeState(marks, getFps(), filenameInput.value));
+}
+
 function renderResults() {
+  updateHash();
   const r = computeResults(marks, getFps());
   if (r.errors.length > 0) {
     results.innerHTML = `<p class="note ${r.errors[0].startsWith("marks out") ? "error" : ""}">${r.errors[0]}</p>`;
@@ -282,6 +320,8 @@ fileInput.addEventListener("change", () => {
   if (!f) return;
   vid.src = URL.createObjectURL(f);
   filenameInput.value = f.name;
+  restoreNote.style.display = "none";
+  fileInput.blur(); // keep focus off inputs so arrow keys step frames (issue #49)
 });
 
 fpsInput.addEventListener("input", renderAll);
@@ -318,6 +358,11 @@ document.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return;
   if (e.key === "ArrowLeft" || e.key === ",") { e.preventDefault(); stepFrames(-1); }
   if (e.key === "ArrowRight" || e.key === ".") { e.preventDefault(); stepFrames(1); }
+  if (e.key === " " && e.target.tagName !== "BUTTON") {
+    e.preventDefault();
+    vid.paused ? vid.play() : vid.pause();
+    updatePlayBtn();
+  }
 });
 
 copyBtn.addEventListener("click", async () => {
@@ -327,10 +372,63 @@ copyBtn.addEventListener("click", async () => {
   } catch {
     copyBtn.textContent = "Select + copy manually";
   }
-  setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+  setTimeout(() => { copyBtn.textContent = "Copy command"; }, 1500);
 });
 
+copyLinkBtn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(location.href);
+    copyLinkBtn.textContent = "Copied!";
+  } catch {
+    copyLinkBtn.textContent = "Select + copy manually";
+  }
+  setTimeout(() => { copyLinkBtn.textContent = "Copy link"; }, 1500);
+});
+
+scrub.addEventListener("input", () => {
+  if (!Number.isFinite(vid.duration) || vid.duration <= 0) return;
+  vid.currentTime = (scrub.value / 1000) * vid.duration;
+});
+
+vid.addEventListener("timeupdate", () => {
+  if (Number.isFinite(vid.duration) && vid.duration > 0) {
+    scrub.value = Math.round((vid.currentTime / vid.duration) * 1000);
+  }
+});
+
+vid.addEventListener("loadedmetadata", () => { scrub.disabled = false; });
+
+importBtn.addEventListener("click", () => {
+  const parsed = parseCommand(importInput.value.trim());
+  if (!parsed) {
+    importMsg.className = "note error";
+    importMsg.textContent = "Couldn't parse that — paste the full racegow-format command line.";
+    return;
+  }
+  filenameInput.value = parsed.filename;
+  Object.assign(marks, parsed.marks);
+  importMsg.className = "note";
+  importMsg.textContent = `Imported marks from “${parsed.filename}”.`;
+  showNote(`State imported — load “${parsed.filename}” and use jump to verify each crossing.`);
+  renderAll();
+});
+
+function showNote(text) {
+  restoreNote.textContent = text;
+  restoreNote.style.display = text ? "block" : "none";
+}
+
 vid.addEventListener("loadedmetadata", renderAll);
+
+// Deep link: restore marks/fps/filename from the URL hash, if present.
+const restored = decodeState(location.hash);
+if (restored) {
+  fpsInput.value = restored.fps;
+  if (restored.filename) filenameInput.value = restored.filename;
+  Object.assign(marks, restored.marks);
+  showNote(`Restored from link — load “${restored.filename || "the clip"}” and use jump to verify marks.`);
+  renderAll();
+}
 </script>
 
 <fpv-footer sha="__GIT_SHA__"></fpv-footer>
