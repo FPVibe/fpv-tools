@@ -24,7 +24,23 @@ FONT_CANDIDATES = [
     "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
     "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
+    "C:\\Windows\\Fonts\\arialbd.ttf",
+    "C:/Windows/Fonts/arial.ttf",
 ]
+
+
+def filter_text_path(path):
+    """Quote+escape a filesystem path for use inside an ffmpeg filter option.
+
+    The ffmpeg filter parser splits options on ':' and uses backslash escapes
+    at multiple levels — and quoting alone does NOT protect a drive colon in
+    some ffmpeg versions — so normalize to forward slashes, escape colons and
+    apostrophes, and wrap the whole value in single quotes.
+    (Verified against Ubuntu ffmpeg 4.4 and a static 9.0.1 build.)
+    """
+    norm = path.replace("\\", "/")
+    norm = norm.replace(":", "\\:").replace("'", "\\'")
+    return f"'{norm}'"
 
 
 def pick_fontspec():
@@ -32,8 +48,8 @@ def pick_fontspec():
     candidates = ([os.environ[FONT_ENV]] if FONT_ENV in os.environ else []) + FONT_CANDIDATES
     for path in candidates:
         if os.path.isfile(path):
-            return f"fontfile={path}"
-    return "font=DejaVu Sans"  # resolved via fontconfig when no known .ttf exists
+            return f"fontfile={filter_text_path(path)}"
+    return "font='DejaVu Sans'"  # resolved via fontconfig when no known font file exists
 
 
 def probe(path):
@@ -133,7 +149,7 @@ def main():
         tf.write(text)
         tf.close()
         tmpfiles.append(tf.name)
-        draw += (f",drawtext={font_spec}:textfile={tf.name}:fontsize={size}:"
+        draw += (f",drawtext={font_spec}:textfile={filter_text_path(tf.name)}:fontsize={size}:"
                  f"fontcolor=white:box=1:boxcolor=black@0.55:boxborderw=8:"
                  f"x={sx}:y={y}:enable='gte(t,{at - 0.001:.5f})'")
     draw = draw.lstrip(",")
