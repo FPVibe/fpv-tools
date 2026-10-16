@@ -91,6 +91,12 @@ Deno.test("decodeState - rejects partial-number and non-positive tokens", () => 
   assertEquals(decodeState("#start=-1&end=2"), null);
 });
 
+Deno.test("decodeState - rejects overflowing (non-finite) numerals", () => {
+  const huge = "9".repeat(400);
+  assertEquals(decodeState(`#end=${huge}&start=1`), null);
+  assertEquals(decodeState(`#fps=${huge}`), null);
+});
+
 Deno.test("buildCommand - shell-quotes hostile filenames", () => {
   const cmd = buildCommand(MARKS, 30, "$(touch /tmp/pwned)`id`.mp4");
   assertStringIncludes(cmd, "'$(touch /tmp/pwned)`id`.mp4'");
