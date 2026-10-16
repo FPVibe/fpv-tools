@@ -50,7 +50,7 @@ body {
 .row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
 
 label.fld { display: flex; flex-direction: column; gap: .25rem; font-size: .8rem; color: var(--muted); }
-input[type="text"], input[type="number"], input[type="file"] {
+input[type="text"], input[type="number"], input[type="file"], select {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -220,13 +220,29 @@ pre.cmd {
 
   <div class="card">
     <h2>The script</h2>
-    <p class="note">The command above runs racegow_format.py — needs ffmpeg; uses DejaVu Sans Bold from the system fonts (or set RACEGOW_FONT to a .ttf path to override).</p>
-    <div class="row" style="margin:.6rem 0">
+    <div class="row">
+      <label class="fld">Run command on
+        <select id="os">
+          <option value="posix">Linux</option>
+          <option value="macos">macOS</option>
+          <option value="windows">Windows</option>
+        </select>
+      </label>
       <a class="btn" href="./racegow_format.py" download>Download racegow_format.py</a>
     </div>
-    <pre class="cmd">chmod +x racegow_format.py
+    <p class="note" style="margin-top:.5rem">Needs ffmpeg and a bold DejaVu/Liberation font (or set RACEGOW_FONT to a .ttf path).</p>
+    <pre class="cmd" id="install-posix" style="margin-top:.6rem">chmod +x racegow_format.py
 mkdir -p ~/.local/bin
 ln -sf "$(pwd)/racegow_format.py" ~/.local/bin/racegow-format</pre>
+    <pre class="cmd" id="install-macos" style="display:none;margin-top:.6rem">chmod +x racegow_format.py
+mkdir -p ~/.local/bin
+ln -sf "$(pwd)/racegow_format.py" ~/.local/bin/racegow-format
+# brew install ffmpeg, if needed</pre>
+    <pre class="cmd" id="install-windows" style="display:none;margin-top:.6rem">Save racegow_format.py next to your clip, then in that folder:
+
+python racegow_format.py "clip.mov" --start 13.7 --laps 40.07 63.27 --end 91.07
+
+(needs Python and ffmpeg on PATH — winget install ffmpeg)</pre>
   </div>
 
 </div>
@@ -248,6 +264,7 @@ const importInput = document.getElementById("import-cmd");
 const importBtn = document.getElementById("import-btn");
 const importMsg = document.getElementById("import-msg");
 const restoreNote = document.getElementById("restore-note");
+const osSelect = document.getElementById("os");
 
 const marks = { start: null, l2: null, l3: null, end: null };
 const MARK_LABELS = { start: "Start", l2: "Lap 2", l3: "Lap 3", end: "Final" };
@@ -293,7 +310,7 @@ function renderMarks() {
 }
 
 function updateHash() {
-  history.replaceState(null, "", "#" + encodeState(marks, getFps(), filenameInput.value));
+  history.replaceState(null, "", "#" + encodeState(marks, getFps(), filenameInput.value, osSelect.value));
 }
 
 function renderResults() {
@@ -310,7 +327,14 @@ function renderResults() {
     ).join("") +
     `<div class="results-line"><span>Hot lap</span><span>${r.hotLap.toFixed(2)}</span></div>` +
     `<div class="results-line total"><span>Total</span><span>${r.total.toFixed(2)}</span></div>`;
-  cmdBox.textContent = buildCommand(marks, getFps(), filenameInput.value);
+  cmdBox.textContent = buildCommand(marks, getFps(), filenameInput.value, osSelect.value);
+}
+
+function switchInstall() {
+  for (const os of ["posix", "macos", "windows"]) {
+    document.getElementById("install-" + os).style.display =
+      osSelect.value === os ? "block" : "none";
+  }
 }
 
 function renderAll() { renderReadout(); renderMarks(); renderResults(); }
@@ -319,11 +343,17 @@ fileInput.addEventListener("change", () => {
   const f = fileInput.files[0];
   if (!f) return;
   vid.src = URL.createObjectURL(f);
-  filenameInput.value = f.name;
+  // Do not clobber a restored/imported filename — it may carry a full path
+  // (copilot review). Only adopt the browser name when the field was default.
+  if (filenameInput.value === "" || filenameInput.value === "clip.mp4") {
+    filenameInput.value = f.name;
+  }
   restoreNote.style.display = "none";
   fileInput.blur(); // keep focus off inputs so arrow keys step frames (issue #49)
   renderAll(); // programmatic value change fires no input event — refresh command/hash
 });
+
+osSelect.addEventListener("change", () => { switchInstall(); renderAll(); });
 
 fpsInput.addEventListener("input", renderAll);
 filenameInput.addEventListener("input", renderResults);
@@ -421,11 +451,18 @@ function showNote(text) {
 
 vid.addEventListener("loadedmetadata", renderAll);
 
-// Deep link: restore marks/fps/filename from the URL hash, if present.
+// Guess the reader's OS so the command and install steps match their shell;
+// a deep link can still override it below.
+osSelect.value = /Win/i.test(navigator.platform || "") ? "windows"
+  : /Mac/i.test(navigator.platform || "") ? "macos" : "posix";
+switchInstall();
+
+// Deep link: restore marks/fps/filename/os from the URL hash, if present.
 const restored = decodeState(location.hash);
 if (restored) {
   fpsInput.value = restored.fps;
   if (restored.filename) filenameInput.value = restored.filename;
+  if (restored.os) { osSelect.value = restored.os; switchInstall(); }
   Object.assign(marks, restored.marks);
   showNote(`Restored from link — load “${restored.filename || "the clip"}” and use jump to verify marks.`);
   renderAll();
