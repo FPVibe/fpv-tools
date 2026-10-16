@@ -18,7 +18,22 @@ import subprocess
 import sys
 import tempfile
 
-FONTFILE = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+FONT_ENV = "RACEGOW_FONT"
+FONT_CANDIDATES = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
+]
+
+
+def pick_fontspec():
+    """drawtext font spec: env override, known paths, else fontconfig name."""
+    candidates = ([os.environ[FONT_ENV]] if FONT_ENV in os.environ else []) + FONT_CANDIDATES
+    for path in candidates:
+        if os.path.isfile(path):
+            return f"fontfile={path}"
+    return "font=DejaVu Sans"  # resolved via fontconfig when no known .ttf exists
 
 
 def probe(path):
@@ -63,8 +78,10 @@ def main():
     info = probe(args.input)
     fps, dur = info["fps"], info["duration"]
 
-    if not os.path.isfile(FONTFILE):
-        sys.exit(f"font not found: {FONTFILE}")
+    font_spec = pick_fontspec()
+    if font_spec.startswith("font="):
+        print(f"note: no known font file found; asking fontconfig for 'DejaVu Sans' "
+              f"(set ${FONT_ENV} to a .ttf path to override)")
 
     if not (0 <= args.start < args.laps[0] < args.laps[1] < args.end < dur):
         sys.exit(f"times must satisfy 0 <= start < l2 < l3 < end < clip duration "
@@ -106,7 +123,7 @@ def main():
         tf.write(text)
         tf.close()
         tmpfiles.append(tf.name)
-        draw += (f",drawtext=fontfile={FONTFILE}:textfile={tf.name}:fontsize={size}:"
+        draw += (f",drawtext={font_spec}:textfile={tf.name}:fontsize={size}:"
                  f"fontcolor=white:box=1:boxcolor=black@0.55:boxborderw=8:"
                  f"x={sx}:y={y}:enable='gte(t,{at - 0.001:.5f})'")
     draw = draw.lstrip(",")

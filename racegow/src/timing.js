@@ -91,12 +91,28 @@ export function decodeState(hash) {
   const s = (hash || "").replace(/^#/, "");
   if (!s) return null;
   const p = new URLSearchParams(s);
+  // Strict numerals only: parseFloat swallows trailing junk ("1.2junk" -> 1.2),
+  // so validate the whole token before accepting it (copilot review).
   const num = (k) => {
-    const v = parseFloat(p.get(k));
-    return Number.isFinite(v) ? v : null;
+    const raw = p.get(k);
+    if (raw === null) return { present: false, ok: true, value: null };
+    if (!/^\d+(\.\d+)?$/.test(raw)) return { present: true, ok: false, value: null };
+    return { present: true, ok: true, value: parseFloat(raw) };
   };
-  const marks = { start: num("start"), l2: num("l2"), l3: num("l3"), end: num("end") };
-  const meaningful = p.has("fps") || p.get("file") || Object.values(marks).some((v) => v !== null);
+  const fpsTok = num("fps");
+  const toks = ["start", "l2", "l3", "end"].map(num);
+  const meaningful = fpsTok.present || p.get("file") || toks.some((t) => t.present);
   if (!meaningful) return null;
-  return { fps: num("fps") ?? 30, filename: p.get("file") || "", marks };
+  if (!fpsTok.ok || toks.some((t) => !t.ok)) return null;
+  if (fpsTok.present && fpsTok.value <= 0) return null;
+  return {
+    fps: fpsTok.present ? fpsTok.value : 30,
+    filename: p.get("file") || "",
+    marks: {
+      start: toks[0].value,
+      l2: toks[1].value,
+      l3: toks[2].value,
+      end: toks[3].value,
+    },
+  };
 }
