@@ -40,12 +40,12 @@ Deno.test("buildCommand - emits racegow-format invocation with frame-grid times"
   const cmd = buildCommand(MARKS, 30, "test_dvr.mp4");
   assertEquals(
     cmd,
-    'racegow-format "test_dvr.mp4" --start 4.20000 --laps 11.33333 18.56667 --end 25.76667',
+    "racegow-format 'test_dvr.mp4' --start 4.20000 --laps 11.33333 18.56667 --end 25.76667",
   );
 });
 
 Deno.test("buildCommand - falls back to a placeholder filename", () => {
-  assertStringIncludes(buildCommand(MARKS, 30, ""), '"clip.mp4"');
+  assertStringIncludes(buildCommand(MARKS, 30, ""), "'clip.mp4'");
 });
 
 Deno.test("parseCommand - round-trips buildCommand output", () => {
@@ -82,4 +82,39 @@ Deno.test("decodeState - null for empty or junk hashes", () => {
   assertEquals(decodeState(""), null);
   assertEquals(decodeState("#"), null);
   assertEquals(decodeState("#foo=bar"), null);
+});
+
+Deno.test("buildCommand - shell-quotes hostile filenames", () => {
+  const cmd = buildCommand(MARKS, 30, "$(touch /tmp/pwned)`id`.mp4");
+  assertStringIncludes(cmd, "'$(touch /tmp/pwned)`id`.mp4'");
+  assertStringIncludes(cmd, "--start");
+});
+
+Deno.test("buildCommand - escapes embedded apostrophes", () => {
+  const cmd = buildCommand(MARKS, 30, "cori's clip.mp4");
+  assertStringIncludes(cmd, "racegow-format 'cori'\\''s clip.mp4' ");
+});
+
+Deno.test("parseCommand - round-trips shell-quoted names with apostrophes", () => {
+  const parsed = parseCommand(buildCommand(MARKS, 30, "cori's clip.mp4"));
+  assertEquals(parsed?.filename, "cori's clip.mp4");
+});
+
+Deno.test("parseCommand - still accepts legacy double-quoted commands", () => {
+  const parsed = parseCommand(
+    'racegow-format "old.mp4" --start 4.20000 --laps 11.33333 18.56667 --end 25.76667',
+  );
+  assertEquals(parsed?.filename, "old.mp4");
+  assertAlmostEquals(parsed!.marks.start, 4.2, 1e-4);
+});
+
+Deno.test("parseCommand - rejects malformed numbers", () => {
+  assertEquals(
+    parseCommand('racegow-format "x.mp4" --start 1.2.3 --laps 2 3 --end 4'),
+    null,
+  );
+  assertEquals(
+    parseCommand('racegow-format "x.mp4" --start abc --laps 2 3 --end 4'),
+    null,
+  );
 });
