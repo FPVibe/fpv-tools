@@ -40,8 +40,81 @@ export function computeResults(marks, fps) {
   return { errors: [], splits, total: q[3] - q[0], hotLap: Math.min(...splits) };
 }
 
+// POSIX-safe single-quote escaping: the command gets pasted into a shell, and
+// a deep link can carry an arbitrary filename, so quote every filename and
+// escape embedded apostrophes as '\'' (copilot review: command injection).
+export function shellQuote(s) {
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
 export function buildCommand(marks, fps, filename) {
   const name = filename && filename.trim() ? filename.trim() : "clip.mp4";
   const q = (k) => quantizeTime(marks[k], fps).toFixed(5);
-  return `racegow-format "${name}" --start ${q("start")} --laps ${q("l2")} ${q("l3")} --end ${q("end")}`;
+  return `racegow-format ${shellQuote(name)} --start ${q("start")} --laps ${q("l2")} ${q("l3")} --end ${q("end")}`;
+}
+
+// Parse a command produced by buildCommand back into filename + marks.
+// Accepts the current single-quoted form (with \'\' escapes) and the legacy
+// double-quoted form. Number tokens must be strict decimals.
+const NUM = String.raw`(\d+(?:\.\d+)?|\.\d+)`;
+const CMD_RE = new RegExp(
+  String.raw`^\s*racegow-format\s+(?:'((?:[^']|'\\'')*)'|"([^"]+)")` +
+    String.raw`\s+--start\s+` + NUM +
+    String.raw`\s+--laps\s+` + NUM + String.raw`\s+` + NUM +
+    String.raw`\s+--end\s+` + NUM + String.raw`\s*$`,
+);
+
+export function parseCommand(text) {
+  const m = text.match(CMD_RE);
+  if (!m) return null;
+  const filename = m[1] !== undefined ? m[1].replace(/'\\''/g, "'") : m[2];
+  const nums = m.slice(3).map(parseFloat);
+  if (nums.some((n) => !Number.isFinite(n))) return null;
+  return {
+    filename,
+    marks: { start: nums[0], l2: nums[1], l3: nums[2], end: nums[3] },
+  };
+}
+
+// URL-hash deep-link state: everything restorable without the video.
+export function encodeState(marks, fps, filename) {
+  const p = new URLSearchParams();
+  if (Number.isFinite(fps)) p.set("fps", fps);
+  if (filename) p.set("file", filename);
+  for (const k of KEYS) {
+    if (Number.isFinite(marks[k])) p.set(k, marks[k].toFixed(5));
+  }
+  return p.toString();
+}
+
+export function decodeState(hash) {
+  const s = (hash || "").replace(/^#/, "");
+  if (!s) return null;
+  const p = new URLSearchParams(s);
+  // Strict numerals only: parseFloat swallows trailing junk ("1.2junk" -> 1.2),
+  // so validate the whole token before accepting it (copilot review).
+  const num = (k) => {
+    const raw = p.get(k);
+    if (raw === null) return { present: false, ok: true, value: null };
+    if (!/^\d+(\.\d+)?$/.test(raw)) return { present: true, ok: false, value: null };
+    const value = parseFloat(raw);
+    if (!Number.isFinite(value)) return { present: true, ok: false, value: null };
+    return { present: true, ok: true, value };
+  };
+  const fpsTok = num("fps");
+  const toks = ["start", "l2", "l3", "end"].map(num);
+  const meaningful = fpsTok.present || p.get("file") || toks.some((t) => t.present);
+  if (!meaningful) return null;
+  if (!fpsTok.ok || toks.some((t) => !t.ok)) return null;
+  if (fpsTok.present && fpsTok.value <= 0) return null;
+  return {
+    fps: fpsTok.present ? fpsTok.value : 30,
+    filename: p.get("file") || "",
+    marks: {
+      start: toks[0].value,
+      l2: toks[1].value,
+      l3: toks[2].value,
+      end: toks[3].value,
+    },
+  };
 }
