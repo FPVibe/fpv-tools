@@ -4,6 +4,7 @@ import {
   assertStringIncludes,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { buildCommand, computeResults, quantizeTime } from "../../racegow/src/timing.js";
+import { decodeState, encodeState, parseCommand } from "../../racegow/src/timing.js";
 
 // Reference values verified against racegow_format.py output on a 30 fps clip.
 const MARKS = { start: 4.2, l2: 11.35, l3: 18.57, end: 25.78 };
@@ -45,4 +46,40 @@ Deno.test("buildCommand - emits racegow-format invocation with frame-grid times"
 
 Deno.test("buildCommand - falls back to a placeholder filename", () => {
   assertStringIncludes(buildCommand(MARKS, 30, ""), '"clip.mp4"');
+});
+
+Deno.test("parseCommand - round-trips buildCommand output", () => {
+  const parsed = parseCommand(buildCommand(MARKS, 30, "my clip 42.mp4"));
+  assertEquals(parsed?.filename, "my clip 42.mp4");
+  assertAlmostEquals(parsed!.marks.start, quantizeTime(MARKS.start, 30));
+  assertAlmostEquals(parsed!.marks.l2, quantizeTime(MARKS.l2, 30));
+  assertAlmostEquals(parsed!.marks.l3, quantizeTime(MARKS.l3, 30));
+  assertAlmostEquals(parsed!.marks.end, quantizeTime(MARKS.end, 30));
+});
+
+Deno.test("parseCommand - returns null on garbage", () => {
+  assertEquals(parseCommand("hello there"), null);
+  assertEquals(parseCommand('racegow-format "x.mp4" --start 1'), null);
+});
+
+Deno.test("encodeState/decodeState - round-trips full state", () => {
+  const enc = encodeState(MARKS, 29.97, "my clip.mp4");
+  const dec = decodeState("#" + enc);
+  assertEquals(dec?.fps, 29.97);
+  assertEquals(dec?.filename, "my clip.mp4");
+  assertAlmostEquals(dec!.marks.start!, MARKS.start);
+  assertAlmostEquals(dec!.marks.end!, MARKS.end);
+});
+
+Deno.test("decodeState - partial hash restores partial marks", () => {
+  const dec = decodeState("#start=4.20000&end=25.76667");
+  assertEquals(dec?.marks.start, 4.2);
+  assertEquals(dec?.marks.l2, null);
+  assertEquals(dec?.fps, 30);
+});
+
+Deno.test("decodeState - null for empty or junk hashes", () => {
+  assertEquals(decodeState(""), null);
+  assertEquals(decodeState("#"), null);
+  assertEquals(decodeState("#foo=bar"), null);
 });
