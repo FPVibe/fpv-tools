@@ -73,6 +73,12 @@ def main():
     out = args.output or (os.path.splitext(args.input)[0] + "_racegow.mp4")
     start, l2, l3, end = (quantize(t, fps)
                           for t in (args.start, args.laps[0], args.laps[1], args.end))
+
+    # Validate after snapping to the frame grid: marks distinct in seconds can
+    # land on the same frame (e.g. 1.00 and 1.01 at 30 fps).
+    if not (start < l2 < l3 < end):
+        sys.exit(f"marks must land on distinct frames in order at {info['rate']} fps "
+                 f"(start={start:.5f} l2={l2:.5f} l3={l3:.5f} end={end:.5f})")
     splits = [l2 - start, l3 - l2, end - l3]
     total = end - start
     hold_to = end + args.hold

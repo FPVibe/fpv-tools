@@ -165,7 +165,7 @@ pre.cmd {
   <div class="card">
     <h2>Video</h2>
     <video id="vid" playsinline preload="auto"></video>
-    <input type="range" id="scrub" min="0" max="1000" value="0" disabled style="width:100%;margin-top:.6rem">
+    <input type="range" id="scrub" min="0" max="1000" value="0" disabled aria-label="Seek video" style="width:100%;margin-top:.6rem">
     <div class="row" style="margin-top:.6rem">
       <button class="btn" id="b10">−10f</button>
       <button class="btn" id="b1">−1f</button>
@@ -322,6 +322,7 @@ fileInput.addEventListener("change", () => {
   filenameInput.value = f.name;
   restoreNote.style.display = "none";
   fileInput.blur(); // keep focus off inputs so arrow keys step frames (issue #49)
+  renderAll(); // programmatic value change fires no input event — refresh command/hash
 });
 
 fpsInput.addEventListener("input", renderAll);

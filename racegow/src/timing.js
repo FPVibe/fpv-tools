@@ -40,26 +40,39 @@ export function computeResults(marks, fps) {
   return { errors: [], splits, total: q[3] - q[0], hotLap: Math.min(...splits) };
 }
 
+// POSIX-safe single-quote escaping: the command gets pasted into a shell, and
+// a deep link can carry an arbitrary filename, so quote every filename and
+// escape embedded apostrophes as '\'' (copilot review: command injection).
+export function shellQuote(s) {
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
 export function buildCommand(marks, fps, filename) {
   const name = filename && filename.trim() ? filename.trim() : "clip.mp4";
   const q = (k) => quantizeTime(marks[k], fps).toFixed(5);
-  return `racegow-format "${name}" --start ${q("start")} --laps ${q("l2")} ${q("l3")} --end ${q("end")}`;
+  return `racegow-format ${shellQuote(name)} --start ${q("start")} --laps ${q("l2")} ${q("l3")} --end ${q("end")}`;
 }
 
 // Parse a command produced by buildCommand back into filename + marks.
+// Accepts the current single-quoted form (with \'\' escapes) and the legacy
+// double-quoted form. Number tokens must be strict decimals.
+const NUM = String.raw`(\d+(?:\.\d+)?|\.\d+)`;
+const CMD_RE = new RegExp(
+  String.raw`^\s*racegow-format\s+(?:'((?:[^']|'\\'')*)'|"([^"]+)")` +
+    String.raw`\s+--start\s+` + NUM +
+    String.raw`\s+--laps\s+` + NUM + String.raw`\s+` + NUM +
+    String.raw`\s+--end\s+` + NUM + String.raw`\s*$`,
+);
+
 export function parseCommand(text) {
-  const m = text.match(
-    /racegow-format\s+"([^"]+)"\s+--start\s+([\d.]+)\s+--laps\s+([\d.]+)\s+([\d.]+)\s+--end\s+([\d.]+)/,
-  );
+  const m = text.match(CMD_RE);
   if (!m) return null;
+  const filename = m[1] !== undefined ? m[1].replace(/'\\''/g, "'") : m[2];
+  const nums = m.slice(3).map(parseFloat);
+  if (nums.some((n) => !Number.isFinite(n))) return null;
   return {
-    filename: m[1],
-    marks: {
-      start: parseFloat(m[2]),
-      l2: parseFloat(m[3]),
-      l3: parseFloat(m[4]),
-      end: parseFloat(m[5]),
-    },
+    filename,
+    marks: { start: nums[0], l2: nums[1], l3: nums[2], end: nums[3] },
   };
 }
 
