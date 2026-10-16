@@ -121,6 +121,14 @@ Deno.test("encodeState/decodeState - os round-trips", () => {
   assertEquals(dec?.os, "windows");
 });
 
+Deno.test("parseCommand - accepts the windows command form", () => {
+  const parsed = parseCommand(
+    'python racegow_format.py "run.mp4" --start 1.00000 --laps 1.50000 2.00000 --end 2.70000',
+  );
+  assertEquals(parsed?.filename, "run.mp4");
+  assertAlmostEquals(parsed!.marks.end!, 2.7, 1e-4);
+});
+
 Deno.test("buildCommand - shell-quotes hostile filenames", () => {
   const cmd = buildCommand(MARKS, 30, "$(touch /tmp/pwned)`id`.mp4");
   assertStringIncludes(cmd, "'$(touch /tmp/pwned)`id`.mp4'");
