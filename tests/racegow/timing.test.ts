@@ -121,6 +121,15 @@ Deno.test("encodeState/decodeState - os round-trips", () => {
   assertEquals(dec?.os, "windows");
 });
 
+Deno.test("buildCommand - windows form sanitizes shell-unsafe filename chars", () => {
+  const cmd = buildCommand(MARKS, 30, 'clip.mov" & calc', "windows");
+  assertStringIncludes(cmd, '"clip.mov & calc"');
+  // no way to break out of the double quotes: no raw '"' from the filename
+  assertEquals(cmd.match(/"/g)?.length, 2);
+  const dollar = buildCommand(MARKS, 30, "$HOME.mp4", "windows");
+  assertStringIncludes(dollar, '"HOME.mp4"');
+});
+
 Deno.test("parseCommand - accepts the windows command form", () => {
   const parsed = parseCommand(
     'python racegow_format.py "run.mp4" --start 1.00000 --laps 1.50000 2.00000 --end 2.70000',
