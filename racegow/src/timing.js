@@ -40,17 +40,32 @@ export function computeResults(marks, fps) {
   return { errors: [], splits, total: q[3] - q[0], hotLap: Math.min(...splits) };
 }
 
+const VALID_OS = new Set(["posix", "macos", "windows"]);
+
 // POSIX-safe single-quote escaping: the command gets pasted into a shell, and
 // a deep link can carry an arbitrary filename, so quote every filename and
 // escape embedded apostrophes as '\'' (copilot review: command injection).
+// On Windows, cmd.exe treats single quotes as literal characters, so the
+// windows form uses double quotes instead — '"' is not a legal NTFS filename
+// character, so any filename that needs one is invalid on the target anyway.
 export function shellQuote(s) {
   return "'" + s.replace(/'/g, "'\\''") + "'";
 }
 
-export function buildCommand(marks, fps, filename) {
+export function buildCommand(marks, fps, filename, os = "posix") {
   const name = filename && filename.trim() ? filename.trim() : "clip.mp4";
   const q = (k) => quantizeTime(marks[k], fps).toFixed(5);
-  return `racegow-format ${shellQuote(name)} --start ${q("start")} --laps ${q("l2")} ${q("l3")} --end ${q("end")}`;
+  const times = `--start ${q("start")} --laps ${q("l2")} ${q("l3")} --end ${q("end")}`;
+  if (os === "windows") {
+    // Displayed name is pasted into cmd/PowerShell inside double quotes — strip
+    // the chars that would break out or interpolate: '"' (closes the quote),
+    // '$' and backtick (PowerShell interpolation), '%' (cmd env expansion).
+    // None are legal NTFS filename characters anyway, except '%'/'$', which are
+    // legal but pathological in names.
+    const winName = name.replace(/["$`%]/g, "");
+    return `python racegow_format.py "${winName}" ${times}`;
+  }
+  return `racegow-format ${shellQuote(name)} ${times}`;
 }
 
 // Parse a command produced by buildCommand back into filename + marks.
@@ -58,7 +73,8 @@ export function buildCommand(marks, fps, filename) {
 // double-quoted form. Number tokens must be strict decimals.
 const NUM = String.raw`(\d+(?:\.\d+)?|\.\d+)`;
 const CMD_RE = new RegExp(
-  String.raw`^\s*racegow-format\s+(?:'((?:[^']|'\\'')*)'|"([^"]+)")` +
+  String.raw`^\s*(?:racegow-format|python[\d.]*\s+(?:[\w~.-]+[\\/])*racegow_format\.py)` +
+    String.raw`\s+(?:'((?:[^']|'\\'')*)'|"([^"]+)")` +
     String.raw`\s+--start\s+` + NUM +
     String.raw`\s+--laps\s+` + NUM + String.raw`\s+` + NUM +
     String.raw`\s+--end\s+` + NUM + String.raw`\s*$`,
@@ -77,10 +93,11 @@ export function parseCommand(text) {
 }
 
 // URL-hash deep-link state: everything restorable without the video.
-export function encodeState(marks, fps, filename) {
+export function encodeState(marks, fps, filename, os) {
   const p = new URLSearchParams();
   if (Number.isFinite(fps)) p.set("fps", fps);
   if (filename) p.set("file", filename);
+  if (os && VALID_OS.has(os)) p.set("os", os);
   for (const k of KEYS) {
     if (Number.isFinite(marks[k])) p.set(k, marks[k].toFixed(5));
   }
@@ -106,10 +123,13 @@ export function decodeState(hash) {
   const meaningful = fpsTok.present || p.get("file") || toks.some((t) => t.present);
   if (!meaningful) return null;
   if (!fpsTok.ok || toks.some((t) => !t.ok)) return null;
-  if (fpsTok.present && fpsTok.value <= 0) return null;
+  // fps must be within the UI's input range so restored state stays renderable
+  if (fpsTok.present && (fpsTok.value < 1 || fpsTok.value > 240)) return null;
+  const osTok = p.get("os");
   return {
     fps: fpsTok.present ? fpsTok.value : 30,
     filename: p.get("file") || "",
+    os: osTok && VALID_OS.has(osTok) ? osTok : null,
     marks: {
       start: toks[0].value,
       l2: toks[1].value,
