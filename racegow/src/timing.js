@@ -57,7 +57,13 @@ export function buildCommand(marks, fps, filename, os = "posix") {
   const q = (k) => quantizeTime(marks[k], fps).toFixed(5);
   const times = `--start ${q("start")} --laps ${q("l2")} ${q("l3")} --end ${q("end")}`;
   if (os === "windows") {
-    return `python racegow_format.py "${name}" ${times}`;
+    // Displayed name is pasted into cmd/PowerShell inside double quotes — strip
+    // the chars that would break out or interpolate: '"' (closes the quote),
+    // '$' and backtick (PowerShell interpolation), '%' (cmd env expansion).
+    // None are legal NTFS filename characters anyway, except '%'/'$', which are
+    // legal but pathological in names.
+    const winName = name.replace(/["$`%]/g, "");
+    return `python racegow_format.py "${winName}" ${times}`;
   }
   return `racegow-format ${shellQuote(name)} ${times}`;
 }

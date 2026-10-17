@@ -269,6 +269,11 @@ const osSelect = document.getElementById("os");
 const marks = { start: null, l2: null, l3: null, end: null };
 const MARK_LABELS = { start: "Start", l2: "Lap 2", l3: "Lap 3", end: "Final" };
 
+// Filename provenance: "auto" = untouched default or adopted from a picked
+// file (safe to re-adopt on the next pick); "manual" = typed, restored from a
+// deep link, or imported from a command (never clobbered by file picks).
+let filenameSource = "auto";
+
 const getFps = () => Number(fpsInput.value) || 30;
 
 function stepFrames(n) {
@@ -343,15 +348,19 @@ fileInput.addEventListener("change", () => {
   const f = fileInput.files[0];
   if (!f) return;
   vid.src = URL.createObjectURL(f);
-  // Do not clobber a restored/imported filename — it may carry a full path
-  // (copilot review). Only adopt the browser name when the field was default.
-  if (filenameInput.value === "" || filenameInput.value === "clip.mp4") {
+  if (filenameSource === "auto") {
     filenameInput.value = f.name;
+    restoreNote.style.display = "none";
+  } else {
+    // Restored/imported/typed name wins — it may carry a host-side full path
+    showNote(`Kept the saved filename (“${filenameInput.value}”). Clear the field to use the picked file's name.`);
   }
-  restoreNote.style.display = "none";
   fileInput.blur(); // keep focus off inputs so arrow keys step frames (issue #49)
   renderAll(); // programmatic value change fires no input event — refresh command/hash
 });
+
+// Typing a name is intent: it becomes "manual" and survives later file picks.
+filenameInput.addEventListener("input", () => { filenameSource = "manual"; });
 
 osSelect.addEventListener("change", () => { switchInstall(); renderAll(); });
 
@@ -386,7 +395,7 @@ document.querySelector(".marks").addEventListener("click", (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.target.tagName === "INPUT") return;
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
   if (e.key === "ArrowLeft" || e.key === ",") { e.preventDefault(); stepFrames(-1); }
   if (e.key === "ArrowRight" || e.key === ".") { e.preventDefault(); stepFrames(1); }
   if (e.key === " " && e.target.tagName !== "BUTTON") {
@@ -437,6 +446,7 @@ importBtn.addEventListener("click", () => {
     return;
   }
   filenameInput.value = parsed.filename;
+  filenameSource = "manual";
   Object.assign(marks, parsed.marks);
   importMsg.className = "note";
   importMsg.textContent = `Imported marks from “${parsed.filename}”.`;
@@ -461,7 +471,10 @@ switchInstall();
 const restored = decodeState(location.hash);
 if (restored) {
   fpsInput.value = restored.fps;
-  if (restored.filename) filenameInput.value = restored.filename;
+  if (restored.filename) {
+    filenameInput.value = restored.filename;
+    filenameSource = "manual";
+  }
   if (restored.os) { osSelect.value = restored.os; switchInstall(); }
   Object.assign(marks, restored.marks);
   showNote(`Restored from link — load “${restored.filename || "the clip"}” and use jump to verify marks.`);
