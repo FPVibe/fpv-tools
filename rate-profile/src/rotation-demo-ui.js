@@ -638,8 +638,9 @@ export class RotationDemo {
   updateReadout(i, angle, rate) {
     const refs = this.readoutEls && this.readoutEls.get(i);
     if (!refs) return;
-    const wrapped = ((angle % 360) + 360) % 360;
-    refs.angle.textContent = `${wrapped.toFixed(1)}°`;
+    // Accumulated rotation, not heading mod 360 — the quad graphic already
+    // conveys orientation, and total rotation is what compares rate profiles.
+    refs.angle.textContent = `${angle.toFixed(1)}°`;
     refs.rate.textContent = `${Math.round(rate)} °/s`;
     refs.time.textContent = `${this.elapsed.toFixed(1)} s`;
   }
