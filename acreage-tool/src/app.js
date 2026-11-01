@@ -767,7 +767,7 @@ export function createAcreageTool() {
 
   function init() {
     map = L.map("map", { zoomControl: true }).setView([42.9157, -89.2253], 15);
-    setTiles("topo");
+    setTiles("osm");
     map.on("click", onMapClick);
     map.on("mousemove", onMapMove);
     wire();
