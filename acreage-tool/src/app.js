@@ -81,6 +81,7 @@ export function createAcreageTool() {
   let map = null;
   let tileLayer = null;
   let preview = null;
+  let pendingPoints = [];
 
   const el = (id) => document.getElementById(id);
 
@@ -364,6 +365,7 @@ export function createAcreageTool() {
   }
 
   function closePolygon() {
+    flushPendingPoints();
     const sh = state.shapes[state.shapes.length - 1];
     if (!sh || sh.type !== "polygon") return;
     if (sh.pts.length < 3) {
@@ -404,7 +406,41 @@ export function createAcreageTool() {
       refresh();
       return;
     }
-    if (state.mode === "draw") addPolygonPoint(e.latlng);
+    if (state.mode === "draw") queuePolygonPoint(e.latlng);
+  }
+
+  /**
+   * Queue a polygon point briefly before committing it.
+   *
+   * A double-click fires two clicks before the dblclick, and those two clicks
+   * must not land as stray vertices when the double-click is being used to
+   * close the shape. Holding each click in its own queue slot (rather than
+   * one shared debounce slot) means a fast series of clicks never drops a
+   * point, and the closing gesture can drop exactly its own two clicks.
+   */
+  function queuePolygonPoint(latlng) {
+    const entry = { latlng, timer: 0 };
+    entry.timer = setTimeout(() => {
+      pendingPoints = pendingPoints.filter((p) => p !== entry);
+      addPolygonPoint(latlng);
+    }, 220);
+    pendingPoints.push(entry);
+  }
+
+  /** Commit every queued point right away. */
+  function flushPendingPoints() {
+    const queued = pendingPoints.splice(0);
+    for (const entry of queued) {
+      clearTimeout(entry.timer);
+      addPolygonPoint(entry.latlng);
+    }
+  }
+
+  /** Discard the most recently queued points (the closing gesture's own clicks). */
+  function dropPendingPoints(count) {
+    for (let i = 0; i < count && pendingPoints.length; i++) {
+      clearTimeout(pendingPoints.pop().timer);
+    }
   }
 
   function onMapMove(e) {
@@ -734,6 +770,7 @@ export function createAcreageTool() {
     document.addEventListener("keydown", (ev) => {
       if (ev.target.tagName === "INPUT" || ev.target.tagName === "SELECT") return;
       if (ev.key === "Escape") {
+        dropPendingPoints(pendingPoints.length);
         if (state.mode === "draw") {
           const sh = state.shapes.pop();
           if (sh) {
@@ -763,7 +800,10 @@ export function createAcreageTool() {
     });
 
     map.on("dblclick", () => {
-      if (state.mode === "draw") closePolygon();
+      if (state.mode !== "draw") return;
+      // The two clicks that make up the double-click are not vertices.
+      dropPendingPoints(2);
+      closePolygon();
     });
   }
 
