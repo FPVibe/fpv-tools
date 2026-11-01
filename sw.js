@@ -5,7 +5,7 @@
 // Bump CACHE_NAME whenever the precache list below changes so clients
 // pick up the new set instead of serving a stale mix.
 const CACHE_PREFIX = "fpv-tools-";
-const CACHE_NAME = `${CACHE_PREFIX}v5`;
+const CACHE_NAME = `${CACHE_PREFIX}v6`;
 
 // Cross-origin hosts we deliberately cache for offline use (e.g. the IGOW
 // tool loads sql.js from here). Anything else cross-origin is passed

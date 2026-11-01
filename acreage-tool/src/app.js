@@ -12,8 +12,8 @@
 import {
   circleArea,
   circleRing,
-  haversine,
-  offsetLatLng,
+  localDistance,
+  localOffset,
   polygonCentroid,
   rectArea,
   rectRing,
@@ -108,8 +108,10 @@ export function createAcreageTool() {
         sh.lat = centroid[0];
         sh.lon = centroid[1];
       }
-      // Independent cross-check: the flat-frame and spherical measures must
-      // agree at parcel scale. A big divergence means the ring is degenerate.
+      // Cross-check against the spherical-excess measure. The two differ by
+      // roughly 0.17% at Wisconsin latitudes because one is an ellipsoid
+      // measure and the other a sphere measure; anything beyond that points
+      // at a degenerate ring.
       const spherical = sphericalArea(sh.pts);
       if (sh.areaM2 > 0 && Math.abs(spherical - sh.areaM2) / sh.areaM2 > 0.005) {
         console.warn("acreage-tool: area cross-check diverged", sh.areaM2, spherical);
@@ -240,31 +242,31 @@ export function createAcreageTool() {
     }
 
     if (sh.type === "circle") {
-      const edge = offsetLatLng(sh.lat, sh.lon, sh.r, 0);
+      const edge = localOffset(sh.lat, sh.lon, sh.r, 0);
       const marker = handleMarker(L.latLng(edge[0], edge[1]), "edge", (ll) => {
-        sh.r = haversine(sh.lat, sh.lon, ll.lat, ll.lng);
+        sh.r = localDistance(sh.lat, sh.lon, ll.lat, ll.lng);
         recomputeAndRender(sh);
       });
       entry.handles.push({ marker, kind: "edge" });
     } else if (sh.type === "square") {
-      const corner = offsetLatLng(sh.lat, sh.lon, sh.s / 2, sh.s / 2);
+      const corner = localOffset(sh.lat, sh.lon, sh.s / 2, sh.s / 2);
       const marker = handleMarker(L.latLng(corner[0], corner[1]), "edge", (ll) => {
-        const dx = haversine(sh.lat, sh.lon, ll.lat, sh.lon);
-        const dy = haversine(sh.lat, sh.lon, sh.lat, ll.lng);
+        const dx = localDistance(sh.lat, sh.lon, ll.lat, sh.lon);
+        const dy = localDistance(sh.lat, sh.lon, sh.lat, ll.lng);
         sh.s = 2 * Math.max(dx, dy);
         recomputeAndRender(sh);
       });
       entry.handles.push({ marker, kind: "edge" });
     } else if (sh.type === "rect") {
-      const east = offsetLatLng(sh.lat, sh.lon, sh.w / 2, 0);
+      const east = localOffset(sh.lat, sh.lon, sh.w / 2, 0);
       const markerE = handleMarker(L.latLng(east[0], east[1]), "edge", (ll) => {
-        sh.w = 2 * haversine(sh.lat, sh.lon, ll.lat, sh.lon);
+        sh.w = 2 * localDistance(sh.lat, sh.lon, ll.lat, sh.lon);
         recomputeAndRender(sh);
       });
       entry.handles.push({ marker: markerE, kind: "edge" });
-      const north = offsetLatLng(sh.lat, sh.lon, 0, sh.h / 2);
+      const north = localOffset(sh.lat, sh.lon, 0, sh.h / 2);
       const markerN = handleMarker(L.latLng(north[0], north[1]), "vert", (ll) => {
-        sh.h = 2 * haversine(sh.lat, sh.lon, sh.lat, ll.lng);
+        sh.h = 2 * localDistance(sh.lat, sh.lon, sh.lat, ll.lng);
         recomputeAndRender(sh);
       });
       entry.handles.push({ marker: markerN, kind: "vert" });
@@ -286,16 +288,16 @@ export function createAcreageTool() {
       if (h.kind === "centre") {
         h.marker.setLatLng(L.latLng(sh.lat, sh.lon));
       } else if (h.kind === "edge" && sh.type === "circle") {
-        const p = offsetLatLng(sh.lat, sh.lon, sh.r, 0);
+        const p = localOffset(sh.lat, sh.lon, sh.r, 0);
         h.marker.setLatLng(L.latLng(p[0], p[1]));
       } else if (h.kind === "edge" && sh.type === "square") {
-        const p = offsetLatLng(sh.lat, sh.lon, sh.s / 2, sh.s / 2);
+        const p = localOffset(sh.lat, sh.lon, sh.s / 2, sh.s / 2);
         h.marker.setLatLng(L.latLng(p[0], p[1]));
       } else if (h.kind === "edge" && sh.type === "rect") {
-        const p = offsetLatLng(sh.lat, sh.lon, sh.w / 2, 0);
+        const p = localOffset(sh.lat, sh.lon, sh.w / 2, 0);
         h.marker.setLatLng(L.latLng(p[0], p[1]));
       } else if (h.kind === "vert" && sh.type === "rect") {
-        const p = offsetLatLng(sh.lat, sh.lon, 0, sh.h / 2);
+        const p = localOffset(sh.lat, sh.lon, 0, sh.h / 2);
         h.marker.setLatLng(L.latLng(p[0], p[1]));
       } else if (h.kind === "vertex") {
         const p = sh.pts[h.idx];
