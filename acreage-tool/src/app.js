@@ -30,6 +30,7 @@ import {
   fromMeters,
   toMeters,
 } from "./units.js";
+import { decodeShapes, encodeShape, shareUrl } from "./share.js";
 
 const PALETTE = ["#e8710a", "#2e8b57", "#1f6fb4", "#b02a2a", "#7b4fa8", "#0f7f8f", "#a5820b", "#b03a6a"];
 
@@ -81,6 +82,8 @@ export function createAcreageTool() {
   let map = null;
   let tileLayer = null;
   let preview = null;
+  let pendingPoints = [];
+  let ignoreHashChange = false;
 
   const el = (id) => document.getElementById(id);
 
@@ -364,6 +367,7 @@ export function createAcreageTool() {
   }
 
   function closePolygon() {
+    flushPendingPoints();
     const sh = state.shapes[state.shapes.length - 1];
     if (!sh || sh.type !== "polygon") return;
     if (sh.pts.length < 3) {
@@ -404,7 +408,41 @@ export function createAcreageTool() {
       refresh();
       return;
     }
-    if (state.mode === "draw") addPolygonPoint(e.latlng);
+    if (state.mode === "draw") queuePolygonPoint(e.latlng);
+  }
+
+  /**
+   * Queue a polygon point briefly before committing it.
+   *
+   * A double-click fires two clicks before the dblclick, and those two clicks
+   * must not land as stray vertices when the double-click is being used to
+   * close the shape. Holding each click in its own queue slot (rather than
+   * one shared debounce slot) means a fast series of clicks never drops a
+   * point, and the closing gesture can drop exactly its own two clicks.
+   */
+  function queuePolygonPoint(latlng) {
+    const entry = { latlng, timer: 0 };
+    entry.timer = setTimeout(() => {
+      pendingPoints = pendingPoints.filter((p) => p !== entry);
+      addPolygonPoint(latlng);
+    }, 220);
+    pendingPoints.push(entry);
+  }
+
+  /** Commit every queued point right away. */
+  function flushPendingPoints() {
+    const queued = pendingPoints.splice(0);
+    for (const entry of queued) {
+      clearTimeout(entry.timer);
+      addPolygonPoint(entry.latlng);
+    }
+  }
+
+  /** Discard the most recently queued points (the closing gesture's own clicks). */
+  function dropPendingPoints(count) {
+    for (let i = 0; i < count && pendingPoints.length; i++) {
+      clearTimeout(pendingPoints.pop().timer);
+    }
   }
 
   function onMapMove(e) {
@@ -537,6 +575,7 @@ export function createAcreageTool() {
         '<span class="meta"><span class="t">' + TYPE_NAME[sh.type] + "</span><br>" +
         '<span class="a">' + formatArea(sh.areaM2, state.areaUnit) + " · " + sizeText(sh) + "</span></span>" +
         '<button class="iconbtn" data-act="vis" title="Show/hide">' + (sh.visible ? "👁" : "🚫") + "</button>" +
+        '<button class="iconbtn" data-act="share" title="Copy a link to this shape">🔗</button>' +
         '<button class="iconbtn" data-act="del" title="Delete">✕</button>';
       li.querySelector("[data-act=vis]").onclick = (ev) => {
         ev.stopPropagation();
@@ -548,6 +587,10 @@ export function createAcreageTool() {
         }
         updateList();
         save();
+      };
+      li.querySelector("[data-act=share]").onclick = (ev) => {
+        ev.stopPropagation();
+        shareShapes([sh], "Shape");
       };
       li.querySelector("[data-act=del]").onclick = (ev) => {
         ev.stopPropagation();
@@ -566,6 +609,117 @@ export function createAcreageTool() {
     }
     updateList();
     save();
+  }
+
+  /* ---------------------------------------------------------------- sharing */
+
+  /** Copy text to the clipboard, falling back where the API is refused. */
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      const field = document.createElement("textarea");
+      field.value = text;
+      field.setAttribute("readonly", "");
+      field.style.position = "fixed";
+      field.style.opacity = "0";
+      document.body.appendChild(field);
+      field.select();
+      let copied = false;
+      try {
+        copied = document.execCommand("copy");
+      } catch {
+        copied = false;
+      }
+      document.body.removeChild(field);
+      return copied;
+    }
+  }
+
+  /** Copy a link that restores the given shapes. */
+  async function shareShapes(shapes, label) {
+    if (!shapes.length) {
+      setStatus("Nothing to share yet");
+      return;
+    }
+    const url = shareUrl(location.href, shapes, state.areaUnit);
+    const copied = await copyText(url);
+    setStatus(copied ? label + " link copied to the clipboard" : label + " link: " + url);
+    // Keep the address bar in step so the link can also be copied by hand.
+    const payload = url.split("#")[1];
+    if (location.hash.slice(1) !== payload) {
+      ignoreHashChange = true;
+      location.hash = payload;
+    }
+  }
+
+  /** Rebuild an app shape from its decoded wire form. */
+  function shapeFromWire(wire) {
+    const sh = {
+      id: state.nextId++,
+      type: wire.type,
+      color: PALETTE[state.colorIdx++ % PALETTE.length],
+      visible: true,
+      shared: true,
+      lat: wire.lat ?? 0,
+      lon: wire.lon ?? 0,
+    };
+    if (wire.type === "circle") sh.r = wire.r;
+    if (wire.type === "square") sh.s = wire.s;
+    if (wire.type === "rect") {
+      sh.w = wire.w;
+      sh.h = wire.h;
+    }
+    if (wire.type === "polygon") sh.pts = wire.pts.map((point) => [point[0], point[1]]);
+    return computeShape(sh);
+  }
+
+  /**
+   * Load the shapes carried in a URL hash.
+   *
+   * Shapes already on the map are matched by their wire form, so reloading a
+   * link does not stack duplicates on top of the stored ones.
+   *
+   * @param {string} hash
+   * @returns {number} how many shapes were added
+   */
+  function applySharedShapes(hash) {
+    const shared = decodeShapes(hash);
+    if (!shared) return 0;
+    if (shared.areaUnit) {
+      state.areaUnit = shared.areaUnit;
+      el("unit-area").value = shared.areaUnit;
+    }
+    let added = 0;
+    for (const wire of shared.shapes) {
+      const key = encodeShape(wire, null);
+      const existing = state.shapes.find((s) => encodeShape(s, null) === key);
+      if (existing) {
+        select(existing.id);
+        continue;
+      }
+      addShape(shapeFromWire(wire));
+      added++;
+    }
+    let bounds = null;
+    for (const sh of state.shapes) {
+      if (!sh.shared) continue;
+      for (const point of sh.ring) {
+        const latlng = L.latLng(point[0], point[1]);
+        bounds = bounds ? bounds.extend(latlng) : L.latLngBounds([latlng]);
+      }
+    }
+    if (bounds && bounds.isValid()) map.fitBounds(bounds, { padding: [48, 48] });
+    if (added) {
+      setStatus(
+        added === 1
+          ? "Loaded a shared shape from the link"
+          : "Loaded " + added + " shared shapes from the link",
+      );
+    }
+    refresh();
+    return added;
   }
 
   /* --------------------------------------------------------- persistence  */
@@ -704,6 +858,14 @@ export function createAcreageTool() {
       if (parts.length === 2 && parts.every((n) => !isNaN(n))) map.setView([parts[0], parts[1]], 16);
     };
     el("btn-export").onclick = exportGeoJSON;
+    el("btn-share-all").onclick = () => shareShapes(state.shapes, "All shapes");
+    window.addEventListener("hashchange", () => {
+      if (ignoreHashChange) {
+        ignoreHashChange = false;
+        return;
+      }
+      applySharedShapes(location.hash);
+    });
     el("btn-clear").onclick = () => {
       if (!state.shapes.length) return;
       for (const sh of state.shapes) {
@@ -734,6 +896,7 @@ export function createAcreageTool() {
     document.addEventListener("keydown", (ev) => {
       if (ev.target.tagName === "INPUT" || ev.target.tagName === "SELECT") return;
       if (ev.key === "Escape") {
+        dropPendingPoints(pendingPoints.length);
         if (state.mode === "draw") {
           const sh = state.shapes.pop();
           if (sh) {
@@ -763,7 +926,10 @@ export function createAcreageTool() {
     });
 
     map.on("dblclick", () => {
-      if (state.mode === "draw") closePolygon();
+      if (state.mode !== "draw") return;
+      // The two clicks that make up the double-click are not vertices.
+      dropPendingPoints(2);
+      closePolygon();
     });
   }
 
@@ -777,6 +943,7 @@ export function createAcreageTool() {
     load();
     updateHint();
     refresh();
+    applySharedShapes(location.hash);
   }
 
   init();
