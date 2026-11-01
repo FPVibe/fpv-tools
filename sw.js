@@ -5,7 +5,7 @@
 // Bump CACHE_NAME whenever the precache list below changes so clients
 // pick up the new set instead of serving a stale mix.
 const CACHE_PREFIX = "fpv-tools-";
-const CACHE_NAME = `${CACHE_PREFIX}v3`;
+const CACHE_NAME = `${CACHE_PREFIX}v5`;
 
 // Cross-origin hosts we deliberately cache for offline use (e.g. the IGOW
 // tool loads sql.js from here). Anything else cross-origin is passed
@@ -50,6 +50,13 @@ const PRECACHE_URLS = [
   "./racegow/index.html",
   "./racegow/src/timing.js",
   "./racegow/racegow_format.py",
+  "./acreage-tool/",
+  "./acreage-tool/index.html",
+  "./acreage-tool/src/app.js",
+  "./acreage-tool/src/geometry.js",
+  "./acreage-tool/src/units.js",
+  "./acreage-tool/vendor/leaflet.js",
+  "./acreage-tool/vendor/leaflet.css",
 ];
 
 self.addEventListener("install", (event) => {

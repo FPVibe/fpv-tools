@@ -21,6 +21,7 @@ const PAGES = [
   { path: "rate-profile/index.html", root: "../", home: false },
   { path: "igow/index.html", root: "../", home: false },
   { path: "prop-motor-sizer/index.html", root: "../", home: false },
+  { path: "acreage-tool/index.html", root: "../", home: false },
 ];
 
 for (const page of PAGES) {
