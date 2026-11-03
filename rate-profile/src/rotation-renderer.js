@@ -185,10 +185,7 @@ export class RotationRenderer {
       // Fade older segments out, newer segments in.
       const alpha = 0.05 + (i / trail.length) * 0.5;
       const start = trail[i - 1] * DEG_TO_RAD;
-      let delta = trail[i] - trail[i - 1];
-      // Take the short way around wraps (359° → 1° is +2°, not -358°).
-      if (delta > 180) delta -= 360;
-      if (delta < -180) delta += 360;
+      const delta = trail[i] - trail[i - 1];
       if (Math.abs(delta) < 0.01) continue;
       ctx.strokeStyle = this.withAlpha(color, alpha);
       ctx.beginPath();

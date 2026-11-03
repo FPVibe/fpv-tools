@@ -64,6 +64,7 @@ export class RotationDemo {
     this.lastRate = new Map(); // profile index -> last computed rate
     this.selected = new Set([0, 1]); // default: first two profiles that exist
     this.builtProfileCount = 0;
+    this.profileRefs = [];
     this.readoutKey = "";
     this.dirty = true;
 
@@ -96,22 +97,11 @@ export class RotationDemo {
 
     if (!this.running) {
       const profiles = this.profilesGetter() ?? [];
-      const countChanged = Math.min(profiles.length, PROFILE_LABELS.length) !==
-        this.builtProfileCount;
-      this.syncProfiles(profiles);
-      if (countChanged) {
-        this.syncReadouts(profiles);
-        this.rebuildFrames();
-      }
+      if (this.syncProfiles(profiles)) this.rebuildFrames();
+      this.syncReadouts(profiles);
     }
 
     if (this.running || this.dirty) {
-      if (!this.running) {
-        // Keep toggles/readouts in sync with profile-list changes while paused.
-        const profiles = this.profilesGetter() ?? [];
-        this.syncProfiles(profiles);
-        this.syncReadouts(profiles);
-      }
       this.renderFrame();
       this.dirty = false;
     }
@@ -528,29 +518,51 @@ export class RotationDemo {
   // ---------------------------------------------------------------------------
 
   /**
-   * Rebuild the per-profile checkbox row when the profile count changes.
+   * Synchronize profile toggles and reset accumulated state when profiles are
+   * removed or replaced.
    * @param {Object[]} profiles
    * @param {boolean} [force=false]
    */
   syncProfiles(profiles, force = false) {
     const count = Math.min(profiles.length, PROFILE_LABELS.length);
-    if (!force && count === this.builtProfileCount) {
-      profiles.slice(0, count).forEach((profile, i) => {
-        const label = this.togglesWrap.children[i];
-        const textNode = label?.lastChild;
-        const text = this.profileToggleText(i, profile);
-        if (textNode && textNode.textContent !== text) textNode.textContent = text;
+    const currentProfiles = profiles.slice(0, PROFILE_LABELS.length);
+    const identitiesChanged = !force && (
+      currentProfiles.length < this.profileRefs.length ||
+      currentProfiles.some((profile, i) => profile !== this.profileRefs[i])
+    );
+    const countChanged = force || count !== this.builtProfileCount;
+
+    if (identitiesChanged) {
+      this.elapsed = 0;
+      this.script = null;
+      this.scriptStart = 0;
+      this.stick = 0;
+      this.prevStick = 0;
+      this.trails.clear();
+      this.lastAngle.clear();
+      this.lastRate.clear();
+      this.readoutKey = "";
+    }
+    this.profileRefs = currentProfiles;
+
+    if (countChanged) {
+      this.builtProfileCount = count;
+      for (const i of this.selected) {
+        if (i >= count) this.selected.delete(i);
+      }
+      this.togglesWrap.replaceChildren();
+      currentProfiles.forEach((profile, i) => {
+        this.togglesWrap.appendChild(this.createProfileToggle(i, profile));
       });
-      return;
+    } else {
+      currentProfiles.forEach((profile, i) => {
+        const textNode = this.togglesWrap.children[i]?.lastChild;
+        const text = this.profileToggleText(i, profile);
+        if (textNode && textNode.nodeValue !== text) textNode.nodeValue = text;
+      });
     }
-    this.builtProfileCount = count;
-    for (const i of this.selected) {
-      if (i >= count) this.selected.delete(i);
-    }
-    this.togglesWrap.replaceChildren();
-    profiles.slice(0, PROFILE_LABELS.length).forEach((profile, i) => {
-      this.togglesWrap.appendChild(this.createProfileToggle(i, profile));
-    });
+
+    return countChanged || identitiesChanged;
   }
 
   profileToggleText(i, profile) {
