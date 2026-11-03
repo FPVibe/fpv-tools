@@ -34,11 +34,11 @@ export class RotationRenderer {
   }
 
   /**
-   * Set the quads to draw (1-3 entries; extras are ignored).
+   * Set the quads to draw.
    * @param {{label: string, color: string}[]} quads
    */
   setQuads(quads) {
-    this.quads = Array.isArray(quads) ? quads.slice(0, 3) : [];
+    this.quads = Array.isArray(quads) ? quads.slice() : [];
   }
 
   /** Clear the canvas to the dark background. */
