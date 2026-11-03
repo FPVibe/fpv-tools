@@ -96,8 +96,10 @@ export class RotationDemo {
 
     if (!this.running) {
       const profiles = this.profilesGetter() ?? [];
-      if (Math.min(profiles.length, PROFILE_LABELS.length) !== this.builtProfileCount) {
-        this.syncProfiles(profiles);
+      const countChanged = Math.min(profiles.length, PROFILE_LABELS.length) !==
+        this.builtProfileCount;
+      this.syncProfiles(profiles);
+      if (countChanged) {
         this.syncReadouts(profiles);
         this.rebuildFrames();
       }
@@ -532,7 +534,15 @@ export class RotationDemo {
    */
   syncProfiles(profiles, force = false) {
     const count = Math.min(profiles.length, PROFILE_LABELS.length);
-    if (!force && count === this.builtProfileCount) return;
+    if (!force && count === this.builtProfileCount) {
+      profiles.slice(0, count).forEach((profile, i) => {
+        const label = this.togglesWrap.children[i];
+        const textNode = label?.lastChild;
+        const text = this.profileToggleText(i, profile);
+        if (textNode && textNode.textContent !== text) textNode.textContent = text;
+      });
+      return;
+    }
     this.builtProfileCount = count;
     for (const i of this.selected) {
       if (i >= count) this.selected.delete(i);
@@ -541,6 +551,13 @@ export class RotationDemo {
     profiles.slice(0, PROFILE_LABELS.length).forEach((profile, i) => {
       this.togglesWrap.appendChild(this.createProfileToggle(i, profile));
     });
+  }
+
+  profileToggleText(i, profile) {
+    let text = `Profile ${PROFILE_LABELS[i]}`;
+    const name = profile && profile.name ? String(profile.name).trim() : "";
+    if (name && name !== text) text += ` — ${name}`;
+    return text;
   }
 
   /**
@@ -569,10 +586,7 @@ export class RotationDemo {
     swatch.style.backgroundColor = PROFILE_COLORS[i];
     swatch.setAttribute("aria-hidden", "true");
     label.appendChild(swatch);
-    let text = `Profile ${PROFILE_LABELS[i]}`;
-    const name = profile && profile.name ? String(profile.name).trim() : "";
-    if (name && name !== text) text += ` — ${name}`;
-    label.appendChild(document.createTextNode(text));
+    label.appendChild(document.createTextNode(this.profileToggleText(i, profile)));
     return label;
   }
 
