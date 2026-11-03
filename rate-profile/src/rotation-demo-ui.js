@@ -196,7 +196,10 @@ export class RotationDemo {
     let delta = 0;
     let rate = 0;
     try {
-      const sim = simulateRotation(profile, this.axis, segment, { duration: dt });
+      const sim = simulateRotation(profile, this.axis, segment, {
+        duration: dt,
+        dt: dt > 0 ? dt / Math.ceil(dt * 120) : 1 / 120,
+      });
       delta = typeof sim.angle === "number" ? sim.angle : 0;
       const series = sim.series;
       const last = Array.isArray(series) ? series[series.length - 1] : null;
