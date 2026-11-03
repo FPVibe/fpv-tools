@@ -541,7 +541,7 @@ export class RotationDemo {
       this.trails.clear();
       this.lastAngle.clear();
       this.lastRate.clear();
-      this.readoutKey = "";
+      this.readoutKey = null;
     }
     this.profileRefs = currentProfiles;
 
