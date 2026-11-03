@@ -40,6 +40,18 @@ Characterize an FPV powertrain from prop size, blade count, motor size, KV, batt
 - **Advanced panel** — adjust the motor load factor, battery chemistry (LiPo/LiHV/Li-Ion) and voltage basis (full charge / nominal / under load), and altitude; add battery capacity for a hover-endurance estimate; or enter one thrust-stand measurement to calibrate the whole model to your bench numbers
 - Inputs persist in localStorage; estimates are simplified-physics ballparks (±20–30% unless calibrated), not thrust-stand data
 
+### 📐 Acreage & Shape Tool
+**Path:** `./acreage-tool/`
+
+Measure land on a map. Not an FPV tool — a general parcel-measurement utility that lives here because it shares the site's plumbing. Features:
+- **Shapes** — circle, square, rectangle, or a freehand polygon
+- **Pick a point, then size it** — click the map to drop a shape, or draw a polygon point by point
+- **Drag to adjust** — a centre handle moves a shape, size handles resize it, polygon vertices reshape it, and the enclosed area updates live
+- **Geodesic areas** — measured on the WGS84 ellipsoid, matching geodesic truth to better than 0.001% at a kilometre across (a mean-radius sphere would read ~0.17% low at Wisconsin latitudes)
+- **Units** — lengths in ft/yd/mi/m/km, areas in acres/ha/m²/ft²/km²/mi²; switching units keeps the physical size unchanged
+- **Deep links** — the 🔗 button on a shape copies a link that restores it, carrying the area unit so the recipient reads the same number
+- Shapes persist in localStorage and export as GeoJSON; base layers are OpenStreetMap, Carto Light, OpenTopoMap and Esri satellite
+
 ## Getting Started
 
 1. **Open fpv-tools in your browser:** https://cori.github.io/fpv-tools/
@@ -124,6 +136,14 @@ fpv-tools/
 │   └── src/
 │       ├── app.js          # DOM wiring and rendering
 │       └── sizer-calculator.js  # Pure sizing math (tested)
+├── acreage-tool/
+│   ├── index.html          # Acreage & Shape Tool
+│   ├── src/
+│   │   ├── app.js          # Map wiring and interaction
+│   │   ├── geometry.js     # Ellipsoid area/distance maths (tested)
+│   │   ├── units.js        # Unit conversion and formatting (tested)
+│   │   └── share.js        # Deep-link encoding (tested)
+│   └── vendor/             # Leaflet 1.9.4 (vendored — no CDN dependency)
 └── .github/
     └── workflows/
         ├── deploy.yml      # GitHub Pages auto-deploy on push
