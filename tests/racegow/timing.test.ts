@@ -97,6 +97,47 @@ Deno.test("decodeState - rejects overflowing (non-finite) numerals", () => {
   assertEquals(decodeState(`#fps=${huge}`), null);
 });
 
+Deno.test("decodeState - rejects fps outside the UI's 1-240 range", () => {
+  assertEquals(decodeState("#fps=0.5&start=1&end=2"), null);
+  assertEquals(decodeState("#fps=500&start=1&end=2"), null);
+  assertEquals(decodeState("#fps=240&start=1&end=2")?.fps, 240);
+});
+
+Deno.test("buildCommand - windows form uses python + double quotes", () => {
+  const cmd = buildCommand(MARKS, 30, "VID00111.mov", "windows");
+  assertEquals(
+    cmd,
+    'python racegow_format.py "VID00111.mov" --start 4.20000 --laps 11.33333 18.56667 --end 25.76667',
+  );
+});
+
+Deno.test("buildCommand - default form unchanged (posix)", () => {
+  const cmd = buildCommand(MARKS, 30, "run.mp4");
+  assertStringIncludes(cmd, "racegow-format 'run.mp4'");
+});
+
+Deno.test("encodeState/decodeState - os round-trips", () => {
+  const dec = decodeState("#" + encodeState(MARKS, 30, "run.mp4", "windows"));
+  assertEquals(dec?.os, "windows");
+});
+
+Deno.test("buildCommand - windows form sanitizes shell-unsafe filename chars", () => {
+  const cmd = buildCommand(MARKS, 30, 'clip.mov" & calc', "windows");
+  assertStringIncludes(cmd, '"clip.mov & calc"');
+  // no way to break out of the double quotes: no raw '"' from the filename
+  assertEquals(cmd.match(/"/g)?.length, 2);
+  const dollar = buildCommand(MARKS, 30, "$HOME.mp4", "windows");
+  assertStringIncludes(dollar, '"HOME.mp4"');
+});
+
+Deno.test("parseCommand - accepts the windows command form", () => {
+  const parsed = parseCommand(
+    'python racegow_format.py "run.mp4" --start 1.00000 --laps 1.50000 2.00000 --end 2.70000',
+  );
+  assertEquals(parsed?.filename, "run.mp4");
+  assertAlmostEquals(parsed!.marks.end!, 2.7, 1e-4);
+});
+
 Deno.test("buildCommand - shell-quotes hostile filenames", () => {
   const cmd = buildCommand(MARKS, 30, "$(touch /tmp/pwned)`id`.mp4");
   assertStringIncludes(cmd, "'$(touch /tmp/pwned)`id`.mp4'");
