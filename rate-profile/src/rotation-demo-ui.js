@@ -94,6 +94,15 @@ export class RotationDemo {
       this.simulate(dt);
     }
 
+    if (!this.running) {
+      const profiles = this.profilesGetter() ?? [];
+      if (Math.min(profiles.length, PROFILE_LABELS.length) !== this.builtProfileCount) {
+        this.syncProfiles(profiles);
+        this.syncReadouts(profiles);
+        this.rebuildFrames();
+      }
+    }
+
     if (this.running || this.dirty) {
       if (!this.running) {
         // Keep toggles/readouts in sync with profile-list changes while paused.
