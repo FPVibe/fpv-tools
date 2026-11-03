@@ -464,6 +464,7 @@ export class RotationDemo {
     pad.addEventListener("keyup", (e) => {
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") release();
     });
+    pad.addEventListener("blur", release);
 
     group.appendChild(pad);
     return group;
