@@ -90,6 +90,20 @@
 
             <!-- Graphs - Side-by-Side Mode (populated dynamically by app.js) -->
             <div class="graphs-container-sidebyside" id="graphs-sidebyside" style="display: none;"></div>
+
+            <!-- Rotation Demo (top-down quad spin comparison) -->
+            <div class="collapsible-section rotation-demo-section" data-collapse-key="rotation-demo">
+                <h2 class="collapsible-section-heading">
+                    <button type="button" class="collapsible-section-header" aria-expanded="true">
+                        <span>Rotation Demo</span>
+                        <span class="graph-panel-chevron" aria-hidden="true">▾</span>
+                    </button>
+                </h2>
+                <div class="collapsible-section-body">
+                    <p class="rotation-demo-hint">Drive all selected profiles with the same stick input and watch the quads spin — same input, different rates, watch them diverge.</p>
+                    <div id="rotation-demo-container"></div>
+                </div>
+            </div>
         </div>
 
         <!-- Bulk Import from CLI Dump -->

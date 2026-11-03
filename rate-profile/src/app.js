@@ -2,6 +2,7 @@ import { GraphRenderer, PROFILE_DASH_PATTERNS } from "./graph-renderer.js";
 import { ProfileManager } from "./profile-manager.js";
 import { generateCLI, parseAllRateProfiles, parseCLI } from "./cli-parser.js";
 import { normalizeLimitPercent, normalizeLimitType } from "./rate-calculator.js";
+import { RotationDemo } from "./rotation-demo-ui.js";
 
 /** Maximum number of simultaneous profiles. */
 const MAX_PROFILES = 5;
@@ -66,6 +67,11 @@ class RateProfileComparison {
     this.updateGraphs();
     this.updateExports();
     this.renderHistory();
+
+    this.rotationDemo = new RotationDemo({
+      container: document.getElementById("rotation-demo-container"),
+      profilesGetter: () => this.profiles,
+    });
   }
 
   // ---------------------------------------------------------------------------
