@@ -401,6 +401,11 @@ export function shadeColor(hex, factor) {
   return `#${channel(16)}${channel(8)}${channel(0)}`;
 }
 
+/** Largest angle step projected as a single trail segment. Wider gaps are
+ * subdivided so the polyline follows the sweep instead of cutting the chord
+ * (a chord would make [0, 266.7] and [0, -93.3] indistinguishable). */
+const MAX_TRAIL_STEP_DEG = 20;
+
 /**
  * Project the recent path of the rotating part as one screen polyline.
  *
@@ -418,9 +423,18 @@ export function trailPoints(trail, axis, camera) {
   const angles = trail.filter((angle) => typeof angle === "number" && Number.isFinite(angle));
   if (angles.length < 2) return [];
   const anchor = axis === "roll" ? [0, ARM_LENGTH, 0] : [ARM_LENGTH, 0, 0];
-  return angles.map((angle) =>
-    project(orientPoint(anchor, orientationForAxis(axis, angle)), camera)
-  );
+  const at = (angle) => project(orientPoint(anchor, orientationForAxis(axis, angle)), camera);
+
+  const points = [at(angles[0])];
+  for (let i = 1; i < angles.length; i++) {
+    const from = angles[i - 1];
+    const delta = angles[i] - from;
+    const steps = Math.max(1, Math.ceil(Math.abs(delta) / MAX_TRAIL_STEP_DEG));
+    for (let step = 1; step <= steps; step++) {
+      points.push(at(from + (delta * step) / steps));
+    }
+  }
+  return points;
 }
 
 /**

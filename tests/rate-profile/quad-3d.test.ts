@@ -330,21 +330,29 @@ Deno.test("trailPoints - traces the sweep between sparse samples", () => {
   const positive = trailPoints([0, 266.7], "yaw", THREE_QUARTER);
   const negative = trailPoints([0, -93.3], "yaw", THREE_QUARTER);
 
-  const pathLength = (points: { x: number; y: number }[]) =>
-    points
-      .slice(1)
-      .reduce((sum, p, i) => sum + Math.hypot(p.x - points[i].x, p.y - points[i].y), 0);
   const last = (points: { x: number; y: number }[]) => points[points.length - 1];
+  const at = (deg: number) =>
+    project(orientPoint([ARM_LENGTH, 0, 0], { heading: deg }), THREE_QUARTER);
+  const nearest = (points: { x: number; y: number }[], target: { x: number; y: number }) =>
+    points.reduce(
+      (best, p) => Math.min(best, Math.hypot(p.x - target.x, p.y - target.y)),
+      Infinity,
+    );
 
   // The endpoint is the accumulated angle, never wrapped.
-  const expected = project(orientPoint([ARM_LENGTH, 0, 0], { heading: 266.7 }), THREE_QUARTER);
+  const expected = at(266.7);
   assertAlmostEquals(last(positive).x, expected.x, EPS);
   assertAlmostEquals(last(positive).y, expected.y, EPS);
 
-  // Same endpoints, but the 266.7° sweep is far longer than the 93.3° one.
+  // Same endpoints, but each sweep is subdivided along its own path.
   assertAlmostEquals(last(positive).x, last(negative).x, EPS);
   assertAlmostEquals(last(positive).y, last(negative).y, EPS);
-  assertEquals(pathLength(positive) > 2 * pathLength(negative), true);
+  assertEquals(positive.length, 15); // 266.7° in <=20° steps
+  assertEquals(negative.length, 6); // 93.3° in <=20° steps
+  assertEquals(JSON.stringify(positive) === JSON.stringify(negative), false);
+
+  // The positive sweep passes the 90° mark on the circle; a chord would not.
+  assertEquals(nearest(positive, at(90)) < 0.15, true);
 });
 
 Deno.test("trailPoints - roll trails climb off the ground plane", () => {
