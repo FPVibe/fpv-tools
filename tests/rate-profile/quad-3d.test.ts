@@ -380,3 +380,16 @@ Deno.test("headingArrow - chevrons sit at the tip, flanking the shaft", () => {
   assertEquals(tipToLeft < shaft, true);
   assertEquals(tipToRight < shaft, true);
 });
+
+Deno.test("headingArrow - chevrons stay behind the tip at every heading", () => {
+  // The nose is already oriented, so the chevrons must flank it without
+  // re-applying yaw: they sit just back from the tip, never past it.
+  for (const heading of [0, 90, 180, 270]) {
+    const arrow = headingArrow({ heading, roll: 0, pitch: 0 }, TOP_DOWN);
+    const shaft = Math.hypot(arrow.tip.x - arrow.base.x, arrow.tip.y - arrow.base.y);
+    for (const chevron of [arrow.left, arrow.right]) {
+      const reach = Math.hypot(chevron.x - arrow.base.x, chevron.y - arrow.base.y);
+      assertEquals(reach < shaft, true);
+    }
+  }
+});
