@@ -148,6 +148,7 @@ export class RotationDemo {
       quads.push({ label: `Profile ${PROFILE_LABELS[i]}`, color: PROFILE_COLORS[i] });
       frames.push({
         angleDeg: angle,
+        axis: this.axis,
         trail: this.pushTrail(i, angle),
         rate,
         stick: this.stick,
@@ -236,7 +237,13 @@ export class RotationDemo {
     profiles.forEach((profile, i) => {
       if (!profile || !this.selected.has(i)) return;
       quads.push({ label: `Profile ${PROFILE_LABELS[i]}`, color: PROFILE_COLORS[i] });
-      frames.push({ angleDeg: this.lastAngle.get(i) ?? 0, trail: [], rate: 0, stick: 0 });
+      frames.push({
+        angleDeg: this.lastAngle.get(i) ?? 0,
+        axis: this.axis,
+        trail: [],
+        rate: 0,
+        stick: 0,
+      });
     });
     this.lastQuads = quads;
     this.lastFrames = frames;
@@ -319,7 +326,7 @@ export class RotationDemo {
     this.canvas.height = 500;
     this.canvas.setAttribute(
       "aria-label",
-      "Top-down view of the selected profiles' quads rotating under the stick input",
+      "Three-quarter view of the selected profiles' quads rotating under the stick input",
     );
     canvasWrap.appendChild(this.canvas);
     this.renderer = new RotationRenderer(this.canvas);

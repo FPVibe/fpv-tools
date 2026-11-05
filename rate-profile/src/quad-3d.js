@@ -194,6 +194,13 @@ export function makeCamera(opts = {}) {
 }
 
 /**
+ * The rotation demo's camera: three-quarter view from the front-right,
+ * above. Shared so the renderer and its tests agree on the viewpoint.
+ * @type {Camera}
+ */
+export const DEMO_CAMERA = makeCamera({ azimuthDeg: -35, elevationDeg: 25 });
+
+/**
  * Project a world point to screen coordinates through a camera.
  * @param {number[]} point - [x, y, z] in world coordinates.
  * @param {Camera} camera
@@ -281,8 +288,14 @@ function addBox(parts, center, size, rotationDeg, part) {
   const hy = size[1] / 2;
   const hz = size[2] / 2;
   const corners = [
-    [-hx, -hy, -hz], [hx, -hy, -hz], [hx, hy, -hz], [-hx, hy, -hz],
-    [-hx, -hy, hz], [hx, -hy, hz], [hx, hy, hz], [-hx, hy, hz],
+    [-hx, -hy, -hz],
+    [hx, -hy, -hz],
+    [hx, hy, -hz],
+    [-hx, hy, -hz],
+    [-hx, -hy, hz],
+    [hx, -hy, hz],
+    [hx, hy, hz],
+    [-hx, hy, hz],
   ];
   const base = parts.vertices.length;
   for (const corner of corners) {
@@ -389,38 +402,25 @@ export function shadeColor(hex, factor) {
 }
 
 /**
- * Project the recent path of the rotating part as screen polylines.
+ * Project the recent path of the rotating part as one screen polyline.
  *
  * The traced point is the nose tip for yaw and pitch; the nose sits on the
- * roll axis, so a roll trail traces the wing tip instead. The path breaks
- * at heading wraps (359° → 1°) so no segment cuts across the circle.
+ * roll axis, so a roll trail traces the wing tip instead. Angles are the
+ * controller's accumulated (never wrapped) values, so the path is drawn
+ * straight through them.
  * @param {number[]|undefined} trail - Accumulated angles, oldest first.
  * @param {string} axis - "roll" | "pitch" | "yaw"
  * @param {Camera} camera
- * @returns {ScreenPoint[][]} One array of points per polyline.
+ * @returns {ScreenPoint[]} The path, oldest point first.
  */
-export function trailPolylines(trail, axis, camera) {
-  if (!Array.isArray(trail) || trail.length < 2) return [];
+export function trailPoints(trail, axis, camera) {
+  if (!Array.isArray(trail)) return [];
+  const angles = trail.filter((angle) => typeof angle === "number" && Number.isFinite(angle));
+  if (angles.length < 2) return [];
   const anchor = axis === "roll" ? [0, ARM_LENGTH, 0] : [ARM_LENGTH, 0, 0];
-
-  const lines = [];
-  let current = [];
-  let prev = null;
-  for (const angle of trail) {
-    if (typeof angle !== "number" || !Number.isFinite(angle)) {
-      prev = null;
-      current = [];
-      continue;
-    }
-    if (prev !== null && Math.abs(angle - prev) > 180) {
-      if (current.length > 1) lines.push(current);
-      current = [];
-    }
-    current.push(project(orientPoint(anchor, orientationForAxis(axis, angle)), camera));
-    prev = angle;
-  }
-  if (current.length > 1) lines.push(current);
-  return lines;
+  return angles.map((angle) =>
+    project(orientPoint(anchor, orientationForAxis(axis, angle)), camera)
+  );
 }
 
 /**
