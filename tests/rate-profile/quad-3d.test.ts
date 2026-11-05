@@ -323,33 +323,50 @@ Deno.test("trailPoints - needs at least two samples", () => {
   assertEquals(trailPoints(undefined, "yaw", THREE_QUARTER), []);
 });
 
-Deno.test("trailPoints - draws large signed deltas as a single path", () => {
-  // Accumulated angles never wrap, so a big jump is real rotation, not a
-  // heading wrap — the path is drawn straight through it.
-  const points = trailPoints([0, 266.7], "yaw", THREE_QUARTER);
-  assertEquals(points.length, 2);
+Deno.test("trailPoints - traces the sweep between sparse samples", () => {
+  // A big jump between samples is real rotation, not a heading wrap: the
+  // path follows the sweep instead of cutting the chord, which would erase
+  // the sign of the rotation ([0, 266.7] and [0, -93.3] share endpoints).
+  const positive = trailPoints([0, 266.7], "yaw", THREE_QUARTER);
+  const negative = trailPoints([0, -93.3], "yaw", THREE_QUARTER);
+
+  const pathLength = (points: { x: number; y: number }[]) =>
+    points
+      .slice(1)
+      .reduce((sum, p, i) => sum + Math.hypot(p.x - points[i].x, p.y - points[i].y), 0);
+  const last = (points: { x: number; y: number }[]) => points[points.length - 1];
+
+  // The endpoint is the accumulated angle, never wrapped.
   const expected = project(orientPoint([ARM_LENGTH, 0, 0], { heading: 266.7 }), THREE_QUARTER);
-  assertAlmostEquals(points[1].x, expected.x, EPS);
-  assertAlmostEquals(points[1].y, expected.y, EPS);
+  assertAlmostEquals(last(positive).x, expected.x, EPS);
+  assertAlmostEquals(last(positive).y, expected.y, EPS);
+
+  // Same endpoints, but the 266.7° sweep is far longer than the 93.3° one.
+  assertAlmostEquals(last(positive).x, last(negative).x, EPS);
+  assertAlmostEquals(last(positive).y, last(negative).y, EPS);
+  assertEquals(pathLength(positive) > 2 * pathLength(negative), true);
 });
 
 Deno.test("trailPoints - roll trails climb off the ground plane", () => {
   // The nose sits on the roll axis, so a roll trail traces the wing tip.
   const roll = trailPoints([0, 45, 90], "roll", THREE_QUARTER);
-  assertEquals(roll.length, 3);
+  assertEquals(roll.length > 3, true); // 45° steps are subdivided
 
   const ground = project(orientPoint([0, ARM_LENGTH, 0], { roll: 0 }), THREE_QUARTER);
   const raised = project(orientPoint([0, ARM_LENGTH, 0], { roll: 90 }), THREE_QUARTER);
+  const tip = roll[roll.length - 1];
   assertEquals(raised.y < ground.y - 0.3, true);
-  assertAlmostEquals(roll[2].x, raised.x, EPS);
-  assertAlmostEquals(roll[2].y, raised.y, EPS);
+  assertAlmostEquals(tip.x, raised.x, EPS);
+  assertAlmostEquals(tip.y, raised.y, EPS);
 });
 
 Deno.test("trailPoints - yaw trails stay on the ground ring", () => {
   const yaw = trailPoints([0, 45, 90], "yaw", THREE_QUARTER);
+  assertEquals(yaw.length > 3, true); // 45° steps are subdivided
   const expected = project(orientPoint([ARM_LENGTH, 0, 0], { heading: 90 }), THREE_QUARTER);
-  assertAlmostEquals(yaw[2].x, expected.x, EPS);
-  assertAlmostEquals(yaw[2].y, expected.y, EPS);
+  const tip = yaw[yaw.length - 1];
+  assertAlmostEquals(tip.x, expected.x, EPS);
+  assertAlmostEquals(tip.y, expected.y, EPS);
 });
 
 // ---------------------------------------------------------------------------
