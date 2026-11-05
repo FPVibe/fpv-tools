@@ -418,3 +418,11 @@ Deno.test("headingArrow - chevrons stay behind the tip at every heading", () => 
     }
   }
 });
+
+Deno.test("headingArrow - chevrons stay distinct on a vertical nose", () => {
+  // At pitch 90° the nose points straight up, where a world-space Z rotation
+  // leaves it unchanged and would collapse both flanks onto one direction.
+  const arrow = headingArrow({ heading: 0, roll: 0, pitch: 90 }, THREE_QUARTER);
+  const gap = Math.hypot(arrow.left.x - arrow.right.x, arrow.left.y - arrow.right.y);
+  assertEquals(gap > 0.01, true);
+});
