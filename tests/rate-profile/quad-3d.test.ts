@@ -3,6 +3,7 @@ import {
   AMBIENT,
   ARM_LENGTH,
   buildQuadModel,
+  DEMO_CAMERA,
   faceCentroid,
   faceNormal,
   headingArrow,
@@ -19,7 +20,7 @@ import {
   shadeColor,
   shadeFactor,
   sortFacesForPainter,
-  trailPolylines,
+  trailPoints,
 } from "../../rate-profile/src/quad-3d.js";
 
 /** Tolerance for floating-point comparisons. */
@@ -28,8 +29,8 @@ const EPS = 1e-9;
 /** Camera looking straight down: world +x → screen right, +y → screen up. */
 const TOP_DOWN = makeCamera({ azimuthDeg: 0, elevationDeg: 90 });
 
-/** Camera off to one side and above, the demo's default three-quarter view. */
-const THREE_QUARTER = makeCamera({});
+/** The demo's three-quarter camera (front-right, above). */
+const THREE_QUARTER = DEMO_CAMERA;
 
 /** Euclidean length of a 3-vector. */
 function length(v: number[]): number {
@@ -308,30 +309,33 @@ Deno.test("projectCircle - a tilted camera foreshortens the ground circle", () =
 });
 
 // ---------------------------------------------------------------------------
-// trailPolylines
+// trailPoints
 // ---------------------------------------------------------------------------
 
-Deno.test("trailPolylines - projects the nose path as one polyline", () => {
-  const lines = trailPolylines([10, 20, 30], "yaw", THREE_QUARTER);
-  assertEquals(lines.length, 1);
-  assertEquals(lines[0].length, 3);
+Deno.test("trailPoints - projects the nose path as one polyline", () => {
+  const points = trailPoints([10, 20, 30], "yaw", THREE_QUARTER);
+  assertEquals(points.length, 3);
 });
 
-Deno.test("trailPolylines - needs at least two samples", () => {
-  assertEquals(trailPolylines([], "yaw", THREE_QUARTER), []);
-  assertEquals(trailPolylines([42], "yaw", THREE_QUARTER), []);
+Deno.test("trailPoints - needs at least two samples", () => {
+  assertEquals(trailPoints([], "yaw", THREE_QUARTER), []);
+  assertEquals(trailPoints([42], "yaw", THREE_QUARTER), []);
+  assertEquals(trailPoints(undefined, "yaw", THREE_QUARTER), []);
 });
 
-Deno.test("trailPolylines - breaks the path at heading wraps", () => {
-  const lines = trailPolylines([350, 355, 359, 2, 8], "yaw", THREE_QUARTER);
-  assertEquals(lines.length, 2);
-  assertEquals(lines[0].length, 3);
-  assertEquals(lines[1].length, 2);
+Deno.test("trailPoints - draws large signed deltas as a single path", () => {
+  // Accumulated angles never wrap, so a big jump is real rotation, not a
+  // heading wrap — the path is drawn straight through it.
+  const points = trailPoints([0, 266.7], "yaw", THREE_QUARTER);
+  assertEquals(points.length, 2);
+  const expected = project(orientPoint([ARM_LENGTH, 0, 0], { heading: 266.7 }), THREE_QUARTER);
+  assertAlmostEquals(points[1].x, expected.x, EPS);
+  assertAlmostEquals(points[1].y, expected.y, EPS);
 });
 
-Deno.test("trailPolylines - roll trails climb off the ground plane", () => {
+Deno.test("trailPoints - roll trails climb off the ground plane", () => {
   // The nose sits on the roll axis, so a roll trail traces the wing tip.
-  const roll = trailPolylines([0, 45, 90], "roll", THREE_QUARTER)[0];
+  const roll = trailPoints([0, 45, 90], "roll", THREE_QUARTER);
   assertEquals(roll.length, 3);
 
   const ground = project(orientPoint([0, ARM_LENGTH, 0], { roll: 0 }), THREE_QUARTER);
@@ -341,8 +345,8 @@ Deno.test("trailPolylines - roll trails climb off the ground plane", () => {
   assertAlmostEquals(roll[2].y, raised.y, EPS);
 });
 
-Deno.test("trailPolylines - yaw trails stay on the ground ring", () => {
-  const yaw = trailPolylines([0, 45, 90], "yaw", THREE_QUARTER)[0];
+Deno.test("trailPoints - yaw trails stay on the ground ring", () => {
+  const yaw = trailPoints([0, 45, 90], "yaw", THREE_QUARTER);
   const expected = project(orientPoint([ARM_LENGTH, 0, 0], { heading: 90 }), THREE_QUARTER);
   assertAlmostEquals(yaw[2].x, expected.x, EPS);
   assertAlmostEquals(yaw[2].y, expected.y, EPS);
