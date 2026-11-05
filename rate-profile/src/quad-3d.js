@@ -432,14 +432,15 @@ export function trailPoints(trail, axis, camera) {
  *   right: ScreenPoint}}
  */
 export function headingArrow(orientation = {}, camera) {
-  const headingDeg = orientation?.heading ?? 0;
   const nose = orientPoint([1, 0, 0], orientation);
   const reach = ARM_LENGTH * 1.3;
   const tip = [nose[0] * reach, nose[1] * reach, nose[2] * reach];
 
   const chevron = (offsetDeg) => {
-    // Flank the nose in the heading plane, just back from the tip.
-    const dir = rotateZ(nose, headingDeg + offsetDeg);
+    // Flank the nose in the heading plane, just back from the tip. The nose
+    // is already oriented, so only the flank offset is applied here — adding
+    // the heading again would swing the chevrons past the tip.
+    const dir = rotateZ(nose, offsetDeg);
     const back = 0.09;
     return project(
       [tip[0] + dir[0] * back, tip[1] + dir[1] * back, tip[2] + dir[2] * back],
