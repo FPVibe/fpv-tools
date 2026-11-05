@@ -451,15 +451,17 @@ export function headingArrow(orientation = {}, camera) {
   const tip = [nose[0] * reach, nose[1] * reach, nose[2] * reach];
 
   const chevron = (offsetDeg) => {
-    // Flank the nose in the heading plane, just back from the tip. The nose
-    // is already oriented, so only the flank offset is applied here — adding
-    // the heading again would swing the chevrons past the tip.
-    const dir = rotateZ(nose, offsetDeg);
-    const back = 0.09;
-    return project(
-      [tip[0] + dir[0] * back, tip[1] + dir[1] * back, tip[2] + dir[2] * back],
-      camera,
-    );
+    // Build the flank in body coordinates and orient it with the same
+    // rotation as the shaft. Rotating the already-oriented nose in world
+    // space double-applies yaw, and on a vertical nose (pitch 90°) a world Z
+    // rotation leaves it unchanged, collapsing both flanks onto one line.
+    const flank = orientPoint(rotateZ([1, 0, 0], offsetDeg), orientation);
+    const point = [
+      tip[0] + flank[0] * ARM_LENGTH * 0.09,
+      tip[1] + flank[1] * ARM_LENGTH * 0.09,
+      tip[2] + flank[2] * ARM_LENGTH * 0.09,
+    ];
+    return project(point, camera);
   };
 
   return {
