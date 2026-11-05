@@ -111,12 +111,13 @@ Deno.test("orientPoint - pitch moves the nose out of the ground plane", () => {
 });
 
 Deno.test("orientPoint - roll is applied in the body frame, before yaw", () => {
-  // Nose east, rolled 90°: the north wing is straight up. Yawing 90° after
-  // that must swing the (still raised) wing onto the +x axis, not flatten it.
+  // Nose east, rolled 90°: the north wing is straight up. Yawing after that
+  // must keep it up (yaw cannot tilt a vertical vector); the reverse order
+  // would swing the wing onto the -x axis instead.
   const wing = orientPoint([0, 1, 0], { heading: 90, roll: 90, pitch: 0 });
-  assertAlmostEquals(wing[0], 1, EPS);
+  assertAlmostEquals(wing[0], 0, EPS);
   assertAlmostEquals(wing[1], 0, EPS);
-  assertAlmostEquals(wing[2], 0, EPS);
+  assertAlmostEquals(wing[2], 1, EPS);
 });
 
 Deno.test("orientPoint - defaults to no rotation", () => {
@@ -180,13 +181,14 @@ Deno.test("project - depth is the distance along the view axis", () => {
   assertAlmostEquals(towardCamera.depth, TOP_DOWN.distance - 1, EPS);
 });
 
-Deno.test("project - side camera sees height as screen-left and north as screen-right", () => {
+Deno.test("project - side camera sees world up as screen up and north as screen right", () => {
   const side = makeCamera({ azimuthDeg: 0, elevationDeg: 0 });
   const up = project([0, 0, 1], side);
-  assertEquals(up.x < 0, true);
+  assertAlmostEquals(up.x, 0, EPS);
+  assertEquals(up.y < 0, true);
   const north = project([0, 1, 0], side);
   assertEquals(north.x > 0, true);
-  assertEquals(north.y < 0, true);
+  assertAlmostEquals(north.y, 0, EPS);
 });
 
 Deno.test("project - three-quarter camera keeps the origin at the center", () => {
@@ -327,12 +329,23 @@ Deno.test("trailPolylines - breaks the path at heading wraps", () => {
   assertEquals(lines[1].length, 2);
 });
 
-Deno.test("trailPolylines - roll and pitch trails leave the ground plane", () => {
+Deno.test("trailPolylines - roll trails climb off the ground plane", () => {
+  // The nose sits on the roll axis, so a roll trail traces the wing tip.
   const roll = trailPolylines([0, 45, 90], "roll", THREE_QUARTER)[0];
+  assertEquals(roll.length, 3);
+
+  const ground = project(orientPoint([0, ARM_LENGTH, 0], { roll: 0 }), THREE_QUARTER);
+  const raised = project(orientPoint([0, ARM_LENGTH, 0], { roll: 90 }), THREE_QUARTER);
+  assertEquals(raised.y < ground.y - 0.3, true);
+  assertAlmostEquals(roll[2].x, raised.x, EPS);
+  assertAlmostEquals(roll[2].y, raised.y, EPS);
+});
+
+Deno.test("trailPolylines - yaw trails stay on the ground ring", () => {
   const yaw = trailPolylines([0, 45, 90], "yaw", THREE_QUARTER)[0];
-  const rollSpan = Math.max(...roll.map((p) => p.y)) - Math.min(...roll.map((p) => p.y));
-  const yawSpan = Math.max(...yaw.map((p) => p.y)) - Math.min(...yaw.map((p) => p.y));
-  assertEquals(rollSpan > yawSpan, true);
+  const expected = project(orientPoint([ARM_LENGTH, 0, 0], { heading: 90 }), THREE_QUARTER);
+  assertAlmostEquals(yaw[2].x, expected.x, EPS);
+  assertAlmostEquals(yaw[2].y, expected.y, EPS);
 });
 
 // ---------------------------------------------------------------------------
