@@ -20,9 +20,9 @@ import {
   orientVertices,
   project,
   projectCircle,
+  rasterizeFaces,
   shadeColor,
   shadeFactor,
-  sortFacesForPainter,
   trailPoints,
 } from "./quad-3d.js";
 
@@ -143,9 +143,6 @@ export class RotationRenderer {
 
     // Model → screen: orient in world space, project, then scale into the cell.
     const oriented = orientVertices(this.model.vertices, orientation);
-    const screen = oriented.map((vertex) =>
-      place(project(vertex, DEMO_CAMERA), centerX, centerY, scale)
-    );
 
     // Ground shadow and reference ring keep the depth readable.
     this.fillPolygon(
@@ -162,20 +159,9 @@ export class RotationRenderer {
     // Fading trail of the rotating part's recent path.
     this.drawTrail(frame.trail, axis, quad.color, scale, centerX, centerY);
 
-    // Solid faces, far to near (painter's algorithm).
-    for (const face of sortFacesForPainter(this.model.faces, oriented, DEMO_CAMERA)) {
-      const normal = orientNormal(faceNormal(this.model.vertices, face), orientation);
-      const factor = shadeFactor(normal, LIGHT);
-      const base = face.part === "arm" || face.part === "motor"
-        ? quad.color
-        : PART_COLORS[face.part];
-      const color = shadeColor(base, factor);
-      this.fillPolygon(
-        face.indices.map((i) => screen[i]),
-        color,
-        shadeColor(color, 0.55),
-      );
-    }
+    // Depth-buffered model: per-pixel visibility, so parts that pass under
+    // each other (arms through the body) occlude correctly.
+    this.paintModel(oriented, orientation, quad.color, centerX, centerY, scale);
 
     // Heading arrow along the current orientation.
     const arrow = headingArrow(orientation, DEMO_CAMERA);
@@ -210,6 +196,59 @@ export class RotationRenderer {
         height - 40,
         Math.min(cellWidth * 0.3, 110),
       );
+    }
+  }
+
+  /**
+   * Paint the oriented model with per-pixel depth, so parts that pass under
+   * each other (arms through the body) occlude correctly.
+   *
+   * Faces are rasterized supersampled and blitted as half-pixel runs, which
+   * antialiases the silhouette like the surrounding vector drawing.
+   * @param {number[][]} oriented - Model vertices in world coordinates.
+   * @param {{heading: number, roll: number, pitch: number}} orientation
+   * @param {string} color - Profile color for the arm and motor parts.
+   * @param {number} centerX - Model origin on the canvas.
+   * @param {number} centerY
+   * @param {number} scale - Pixels per model unit.
+   */
+  paintModel(oriented, orientation, color, centerX, centerY, scale) {
+    const ctx = this.ctx;
+    const ss = 2; // supersampling factor
+    const projected = oriented.map((vertex) => project(vertex, DEMO_CAMERA));
+    const extentX = Math.max(0.1, ...projected.map((p) => Math.abs(p.x)));
+    const extentY = Math.max(0.1, ...projected.map((p) => Math.abs(p.y)));
+    const width = Math.ceil(extentX * 2 * scale) + 2 * ss;
+    const tall = Math.ceil(extentY * 2 * scale) + 2 * ss;
+    const buffer = rasterizeFaces(this.model.faces, oriented, DEMO_CAMERA, {
+      width: width * ss,
+      height: tall * ss,
+      scale: scale * ss,
+    });
+
+    const shaded = this.model.faces.map((face) => {
+      const normal = orientNormal(faceNormal(this.model.vertices, face), orientation);
+      const base = face.part === "arm" || face.part === "motor" ? color : PART_COLORS[face.part];
+      return shadeColor(base, shadeFactor(normal, LIGHT));
+    });
+
+    // One fillRect per horizontal run of a face; the supersampled run
+    // boundaries land on half pixels, so each edge antialiases.
+    const left = centerX - width / 2;
+    for (let row = 0; row < tall * ss; row++) {
+      const y = centerY - tall / 2 + row / ss;
+      let start = -1;
+      let id = 0;
+      for (let col = 0; col <= width * ss; col++) {
+        const current = col < width * ss ? buffer[row * width * ss + col] : 0;
+        if (current === id) continue;
+        if (id !== 0 && start >= 0) {
+          ctx.fillStyle = shaded[id - 1];
+          ctx.fillRect(left + start / ss, y, (col - start) / ss, 1 / ss);
+        }
+        id = current;
+        start = col;
+      }
     }
   }
 

@@ -20,7 +20,6 @@ import {
   rotateZ,
   shadeColor,
   shadeFactor,
-  sortFacesForPainter,
   trailPoints,
 } from "../../rate-profile/src/quad-3d.js";
 

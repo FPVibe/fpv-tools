@@ -362,21 +362,6 @@ export function faceCentroid(vertices, face) {
 }
 
 /**
- * Order faces far-to-near for the painter's algorithm.
- * @param {QuadFace[]} faces
- * @param {number[][]} orientedVertices - Model vertices in world coordinates.
- * @param {Camera} camera
- * @returns {QuadFace[]} A new array; the input order is left untouched.
- */
-export function sortFacesForPainter(faces, orientedVertices, camera) {
-  const depthOf = (face) => project(faceCentroid(orientedVertices, face), camera).depth;
-  return faces
-    .map((face) => ({ face, depth: depthOf(face) }))
-    .sort((a, b) => b.depth - a.depth)
-    .map((entry) => entry.face);
-}
-
-/**
  * The rasterization viewport: a pixel grid whose center is the model origin.
  * @typedef {object} Viewport
  * @property {number} width - Pixels across the buffer.
