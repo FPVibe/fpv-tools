@@ -14,6 +14,7 @@ import {
   orientVertices,
   project,
   projectCircle,
+  rasterizeFaces,
   rotateX,
   rotateY,
   rotateZ,
@@ -261,25 +262,36 @@ Deno.test("faceCentroid - averages the face's vertices", () => {
 Deno.test("rasterizeFaces - the body occludes the arm crossing under it", () => {
   // Sorting by centroid depth lets an arm's centroid sit nearer the camera
   // than the body it passes under, so the arm paints across the body's top.
-  // Visibility must be decided per pixel instead.
+  // Visibility must be decided per pixel instead: wherever the body's top
+  // face and the 315° arm's top face project onto the same pixel, the body
+  // (nearer the camera from above) must win that pixel.
   const model = buildQuadModel();
   const oriented = orientVertices(model.vertices, {});
-  const viewport = { width: 64, height: 64, scale: 22 };
+  const viewport = { width: 128, height: 128, scale: 44 };
+  const raster = (faces) => rasterizeFaces(faces, oriented, DEMO_CAMERA, viewport);
 
-  const buffer = rasterizeFaces(model.faces, oriented, DEMO_CAMERA, viewport);
+  const isSkyFacing = (face) => faceNormal(model.vertices, face)[2] > 0.9;
+  const topFace = model.faces.find((face) => face.part === "body" && isSkyFacing(face));
+  const armTop = model.faces.find((face) => {
+    if (face.part !== "arm" || !isSkyFacing(face)) return false;
+    const center = faceCentroid(model.vertices, face);
+    return center[0] > 0 && center[1] < 0; // the 315° arm
+  });
+  assertEquals(topFace !== undefined && armTop !== undefined, true);
 
-  // The body's top face: part "body", normal +z in body coordinates.
-  const top = model.faces.findIndex((face) =>
-    face.part === "body" && faceNormal(model.vertices, face)[2] > 0.9
-  );
-  assertEquals(top >= 0, true);
+  const winner = raster(model.faces);
+  const bodyOnly = raster([topFace]);
+  const armOnly = raster([armTop]);
 
-  // A point on the body's top surface, where the 315° arm passes underneath:
-  // the camera (above, elevation 25°) must see the body there.
-  const point = project([0.12, -0.17, 0.08], DEMO_CAMERA);
-  const col = Math.floor(viewport.width / 2 + point.x * viewport.scale);
-  const row = Math.floor(viewport.height / 2 + point.y * viewport.scale);
-  assertEquals(buffer[row * viewport.width + col], top + 1);
+  let overlap = 0;
+  for (let i = 0; i < winner.length; i++) {
+    if (bodyOnly[i] !== 0 && armOnly[i] !== 0) {
+      overlap++;
+      // Both faces cover this pixel; the body is nearer from above.
+      assertEquals(winner[i], model.faces.indexOf(topFace) + 1);
+    }
+  }
+  assertEquals(overlap > 0, true);
 });
 
 Deno.test("rasterizeFaces - background pixels stay empty", () => {
