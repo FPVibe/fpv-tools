@@ -255,20 +255,58 @@ Deno.test("faceCentroid - averages the face's vertices", () => {
 });
 
 // ---------------------------------------------------------------------------
-// sortFacesForPainter
+// rasterizeFaces
 // ---------------------------------------------------------------------------
 
-Deno.test("sortFacesForPainter - orders faces far-to-near for the painter's algorithm", () => {
+Deno.test("rasterizeFaces - the body occludes the arm crossing under it", () => {
+  // Sorting by centroid depth lets an arm's centroid sit nearer the camera
+  // than the body it passes under, so the arm paints across the body's top.
+  // Visibility must be decided per pixel instead.
   const model = buildQuadModel();
-  const oriented = orientVertices(model.vertices, { heading: 20, roll: 10, pitch: -5 });
-  const ordered = sortFacesForPainter(model.faces, oriented, THREE_QUARTER);
+  const oriented = orientVertices(model.vertices, {});
+  const viewport = { width: 64, height: 64, scale: 22 };
 
-  assertEquals(ordered.length, model.faces.length);
-  for (let i = 1; i < ordered.length; i++) {
-    const prevDepth = project(faceCentroid(oriented, ordered[i - 1]), THREE_QUARTER).depth;
-    const depth = project(faceCentroid(oriented, ordered[i]), THREE_QUARTER).depth;
-    assertEquals(depth <= prevDepth + EPS, true);
-  }
+  const buffer = rasterizeFaces(model.faces, oriented, DEMO_CAMERA, viewport);
+
+  // The body's top face: part "body", normal +z in body coordinates.
+  const top = model.faces.findIndex((face) =>
+    face.part === "body" && faceNormal(model.vertices, face)[2] > 0.9
+  );
+  assertEquals(top >= 0, true);
+
+  // A point on the body's top surface, where the 315° arm passes underneath:
+  // the camera (above, elevation 25°) must see the body there.
+  const point = project([0.12, -0.17, 0.08], DEMO_CAMERA);
+  const col = Math.floor(viewport.width / 2 + point.x * viewport.scale);
+  const row = Math.floor(viewport.height / 2 + point.y * viewport.scale);
+  assertEquals(buffer[row * viewport.width + col], top + 1);
+});
+
+Deno.test("rasterizeFaces - background pixels stay empty", () => {
+  const model = buildQuadModel();
+  const oriented = orientVertices(model.vertices, { heading: 90 });
+  const buffer = rasterizeFaces(model.faces, oriented, DEMO_CAMERA, {
+    width: 40,
+    height: 40,
+    scale: 8,
+  });
+  // A corner far outside the model's extent is covered by no face.
+  assertEquals(buffer[0], 0);
+  assertEquals(buffer[40 * 40 - 1], 0);
+});
+
+Deno.test("rasterizeFaces - covers pixels for a back-facing pose", () => {
+  const model = buildQuadModel();
+  // Pitch 90° tips the nose up; the body's underside now faces the camera.
+  const oriented = orientVertices(model.vertices, { pitch: 90 });
+  const buffer = rasterizeFaces(model.faces, oriented, DEMO_CAMERA, {
+    width: 64,
+    height: 64,
+    scale: 22,
+  });
+  let covered = 0;
+  for (const id of buffer) if (id !== 0) covered++;
+  assertEquals(covered > 0, true);
 });
 
 // ---------------------------------------------------------------------------
