@@ -30,3 +30,34 @@ Deno.test("RotationRenderer.drawTrail preserves signed accumulated rotation", ()
   assertAlmostEquals(moves[0][0], 10 + start.x * 30, 1e-12);
   assertAlmostEquals(moves[0][1], 20 + start.y * 30, 1e-12);
 });
+
+Deno.test("RotationRenderer.draw paints one cell per supplied profile", () => {
+  // The app supports five profiles; dropping the extras would desync the
+  // canvas from the checked controls and the readout cards.
+  const texts: string[] = [];
+  const context = new Proxy({} as Record<string, unknown>, {
+    get: (_target, prop: string) =>
+      prop === "measureText" ? () => ({ width: 40 }) : (...args: unknown[]) => {
+        if (prop === "fillText") texts.push(String(args[0]));
+      },
+  });
+  const renderer = new RotationRenderer({
+    width: 420,
+    height: 420,
+    getContext: () => context,
+  } as unknown as HTMLCanvasElement);
+
+  const quads = ["A", "B", "C", "D", "E"].map((label, i) => ({
+    label,
+    color: `#00000${i}`,
+  }));
+  renderer.setQuads(quads);
+  assertEquals(renderer.quads.length, 5);
+
+  renderer.draw(quads.map(() => ({ angleDeg: 0, axis: "yaw", rate: 100 })));
+  // One rate readout per cell, plus one legend label per quad.
+  assertEquals(texts.filter((t) => t.includes("°/s")).length, 5);
+  for (const label of ["A", "B", "C", "D", "E"]) {
+    assertEquals(texts.includes(label), true);
+  }
+});
