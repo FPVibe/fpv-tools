@@ -136,6 +136,16 @@ Deno.test("orientationForAxis - unknown axes fall back to yaw", () => {
   assertEquals(orientationForAxis("banana", 12), { heading: 12, roll: 0, pitch: 0 });
 });
 
+Deno.test("orientationForAxis - positive yaw turns the quad right", () => {
+  // The stick pad and the scripted flicks produce positive angles for
+  // rightward input. With the nose along +x and +z up, a right turn swings
+  // it toward -y (the right wing); +y would be a left turn.
+  const nose = orientPoint([ARM_LENGTH, 0, 0], orientationForAxis("yaw", 90));
+  assertEquals(nose[1] < 0, true);
+  const right = orientPoint([ARM_LENGTH, 0, 0], orientationForAxis("yaw", -90));
+  assertEquals(right[1] > 0, true);
+});
+
 Deno.test("orientVertices - maps every vertex, leaving the input untouched", () => {
   const vertices = [[1, 0, 0], [0, 1, 0]];
   const oriented = orientVertices(vertices, { heading: 90 });
