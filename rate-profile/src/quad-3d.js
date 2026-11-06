@@ -377,6 +377,95 @@ export function sortFacesForPainter(faces, orientedVertices, camera) {
 }
 
 /**
+ * The rasterization viewport: a pixel grid whose center is the model origin.
+ * @typedef {object} Viewport
+ * @property {number} width - Pixels across the buffer.
+ * @property {number} height - Pixels down the buffer.
+ * @property {number} scale - Pixels per model unit.
+ */
+
+/**
+ * Rasterize the model's faces, keeping the nearest face at each pixel.
+ *
+ * Painter's-algorithm sorting fails where boxes interpenetrate — an arm's
+ * centroid can sit nearer the camera than the body it passes under, so the
+ * arm paints across the body. Visibility is decided per pixel instead: each
+ * face is scan-converted with perspective-correct depth (1/z is linear in
+ * screen space for a planar face), and the nearest face wins.
+ * @param {QuadFace[]} faces
+ * @param {number[][]} orientedVertices - Model vertices in world coordinates.
+ * @param {Camera} camera
+ * @param {Viewport} viewport - Buffer is centered on the projected origin.
+ * @returns {Int16Array} width × height entries: the winning face's index plus
+ *   one, or 0 where no face covers the pixel.
+ */
+export function rasterizeFaces(faces, orientedVertices, camera, viewport) {
+  const { width, height, scale } = viewport;
+  const buffer = new Int16Array(width * height);
+  // 1/depth; larger is nearer, so any covered pixel beats the zero initial.
+  const nearest = new Float64Array(width * height);
+
+  let anyProjected = false;
+  for (let f = 0; f < faces.length; f++) {
+    const corners = faces[f].indices.map((index) => {
+      const point = project(orientedVertices[index], camera);
+      return {
+        x: point.x * scale + width / 2,
+        y: point.y * scale + height / 2,
+        w: point.depth > 0 ? 1 / point.depth : 0,
+      };
+    });
+    if (corners.some((corner) => corner.w === 0)) continue; // behind the camera
+    anyProjected = true;
+    paintTriangle(corners[0], corners[1], corners[2], f + 1, buffer, nearest, width, height);
+    paintTriangle(corners[0], corners[2], corners[3], f + 1, buffer, nearest, width, height);
+  }
+  if (!anyProjected) return new Int16Array(width * height);
+  return buffer;
+}
+
+/**
+ * Scan-convert one triangle, keeping the nearest face per pixel.
+ * @param {{x: number, y: number, w: number}} a
+ * @param {{x: number, y: number, w: number}} b
+ * @param {{x: number, y: number, w: number}} c
+ * @param {number} id - Face index plus one.
+ * @param {Int16Array} buffer
+ * @param {Float64Array} nearest
+ * @param {number} width
+ * @param {number} height
+ */
+function paintTriangle(a, b, c, id, buffer, nearest, width, height) {
+  const minX = Math.max(0, Math.floor(Math.min(a.x, b.x, c.x)));
+  const maxX = Math.min(width - 1, Math.ceil(Math.max(a.x, b.x, c.x)));
+  const minY = Math.max(0, Math.floor(Math.min(a.y, b.y, c.y)));
+  const maxY = Math.min(height - 1, Math.ceil(Math.max(a.y, b.y, c.y)));
+  if (minX > maxX || minY > maxY) return;
+
+  const den = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
+  if (Math.abs(den) < 1e-12) return; // degenerate
+
+  for (let y = minY; y <= maxY; y++) {
+    const py = y + 0.5;
+    for (let x = minX; x <= maxX; x++) {
+      const px = x + 0.5;
+      const w1 = ((b.y - c.y) * (px - c.x) + (c.x - b.x) * (py - c.y)) / den;
+      if (w1 < 0) continue;
+      const w2 = ((c.y - a.y) * (px - c.x) + (a.x - c.x) * (py - c.y)) / den;
+      if (w2 < 0) continue;
+      const w3 = 1 - w1 - w2;
+      if (w3 < 0) continue;
+      const depth = w1 * a.w + w2 * b.w + w3 * c.w;
+      const index = y * width + x;
+      if (depth > nearest[index]) {
+        nearest[index] = depth;
+        buffer[index] = id;
+      }
+    }
+  }
+}
+
+/**
  * Diffuse shading factor for a face normal under a light direction.
  * @param {number[]} normal - Unit normal in world coordinates.
  * @param {number[]} light - Unit vector pointing toward the light.
