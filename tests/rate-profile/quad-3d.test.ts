@@ -127,13 +127,13 @@ Deno.test("orientPoint - defaults to no rotation", () => {
 });
 
 Deno.test("orientationForAxis - maps each demo axis onto its body rotation", () => {
-  assertEquals(orientationForAxis("yaw", 30), { heading: 30, roll: 0, pitch: 0 });
+  assertEquals(orientationForAxis("yaw", 30), { heading: -30, roll: 0, pitch: 0 });
   assertEquals(orientationForAxis("roll", 30), { heading: 0, roll: 30, pitch: 0 });
   assertEquals(orientationForAxis("pitch", 30), { heading: 0, roll: 0, pitch: 30 });
 });
 
 Deno.test("orientationForAxis - unknown axes fall back to yaw", () => {
-  assertEquals(orientationForAxis("banana", 12), { heading: 12, roll: 0, pitch: 0 });
+  assertEquals(orientationForAxis("banana", 12), { heading: -12, roll: 0, pitch: 0 });
 });
 
 Deno.test("orientationForAxis - positive yaw turns the quad right", () => {
@@ -349,8 +349,9 @@ Deno.test("trailPoints - traces the sweep between sparse samples", () => {
       Infinity,
     );
 
-  // The endpoint is the accumulated angle, never wrapped.
-  const expected = at(266.7);
+  // The endpoint is the accumulated angle, never wrapped. Demo yaw is
+  // negated, so +266.7° of stick reads as a -266.7° heading.
+  const expected = at(-266.7);
   assertAlmostEquals(last(positive).x, expected.x, EPS);
   assertAlmostEquals(last(positive).y, expected.y, EPS);
 
@@ -362,7 +363,7 @@ Deno.test("trailPoints - traces the sweep between sparse samples", () => {
   assertEquals(JSON.stringify(positive) === JSON.stringify(negative), false);
 
   // The positive sweep passes the 90° mark on the circle; a chord would not.
-  assertEquals(nearest(positive, at(90)) < 0.15, true);
+  assertEquals(nearest(positive, at(-90)) < 0.15, true);
 });
 
 Deno.test("trailPoints - roll trails climb off the ground plane", () => {
@@ -381,7 +382,7 @@ Deno.test("trailPoints - roll trails climb off the ground plane", () => {
 Deno.test("trailPoints - yaw trails stay on the ground ring", () => {
   const yaw = trailPoints([0, 45, 90], "yaw", THREE_QUARTER);
   assertEquals(yaw.length > 3, true); // 45° steps are subdivided
-  const expected = project(orientPoint([ARM_LENGTH, 0, 0], { heading: 90 }), THREE_QUARTER);
+  const expected = project(orientPoint([ARM_LENGTH, 0, 0], { heading: -90 }), THREE_QUARTER);
   const tip = yaw[yaw.length - 1];
   assertAlmostEquals(tip.x, expected.x, EPS);
   assertAlmostEquals(tip.y, expected.y, EPS);

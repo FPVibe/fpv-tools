@@ -22,7 +22,8 @@ Deno.test("RotationRenderer.drawTrail preserves signed accumulated rotation", ()
   assertEquals(moves.length, 14);
 
   // The trail ends at the 266.7° orientation, not the wrapped -93.3°.
-  const end = project(orientPoint([ARM_LENGTH, 0, 0], { heading: 266.7 }), DEMO_CAMERA);
+  // Demo yaw is negated, so the accumulated +266.7° reads as heading -266.7°.
+  const end = project(orientPoint([ARM_LENGTH, 0, 0], { heading: -266.7 }), DEMO_CAMERA);
   assertAlmostEquals(lines[13][0], 10 + end.x * 30, 1e-12);
   assertAlmostEquals(lines[13][1], 20 + end.y * 30, 1e-12);
 

@@ -98,6 +98,9 @@ export function rotateZ(point, angleDeg) {
  *
  * Yaw spins the model in the ground plane; roll banks it about the nose
  * axis; pitch pitches it about the lateral axis. Unknown axes read as yaw.
+ * The demo's angles come from the stick, where positive is rightward, so
+ * yaw is negated here: in this +x-forward/+y-left frame a positive
+ * right-handed heading would swing the nose toward the left wing.
  * @param {string} axis - "roll" | "pitch" | "yaw"
  * @param {number} angleDeg - Accumulated rotation in degrees.
  * @returns {{heading: number, roll: number, pitch: number}}
@@ -106,7 +109,7 @@ export function orientationForAxis(axis, angleDeg) {
   const angle = Number.isFinite(angleDeg) ? angleDeg : 0;
   if (axis === "roll") return { heading: 0, roll: angle, pitch: 0 };
   if (axis === "pitch") return { heading: 0, roll: 0, pitch: angle };
-  return { heading: angle, roll: 0, pitch: 0 };
+  return { heading: -angle, roll: 0, pitch: 0 };
 }
 
 /**
