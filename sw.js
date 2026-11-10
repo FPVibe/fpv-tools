@@ -37,6 +37,7 @@ const PRECACHE_URLS = [
   "./rate-profile/src/profile-manager.js",
   "./rate-profile/src/graph-renderer.js",
   "./rate-profile/src/cli-parser.js",
+  "./rate-profile/src/url-state.js",
   "./rate-profile/src/rate-calculator.js",
   "./rate-profile/src/rotation-demo.js",
   "./rate-profile/src/rotation-demo-ui.js",

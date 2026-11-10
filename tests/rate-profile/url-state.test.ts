@@ -59,7 +59,10 @@ Deno.test("decodeProfile returns null on unsupported ratesType", () => {
 
 Deno.test("decodeProfile normalizes unknown limitType to OFF", () => {
   const decoded = decodeProfile(
-    encodeProfile({ ...sampleProfile, throttle: { ...sampleProfile.throttle, limitType: "BOGUS", limitPercent: 100 } }),
+    encodeProfile({
+      ...sampleProfile,
+      throttle: { ...sampleProfile.throttle, limitType: "BOGUS", limitPercent: 100 },
+    }),
   );
   assertEquals(decoded.throttle.limitType, "OFF");
 });

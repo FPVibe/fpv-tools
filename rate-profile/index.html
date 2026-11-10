@@ -129,6 +129,14 @@
             </div>
         </div>
 
+        <!-- Shareable Comparison Link (populated by app.js) -->
+        <div class="share-comparison">
+            <label for="share-comparison-url">Share this comparison</label>
+            <input type="text" id="share-comparison-url" readonly aria-label="Shareable URL for this comparison">
+            <button id="share-comparison-copy-btn" class="btn btn-secondary">Copy</button>
+            <span id="share-comparison-status" class="status-message" aria-live="polite"></span>
+        </div>
+
         <!-- Profile Editors (populated dynamically by app.js) -->
         <div class="editors-section" id="editors-section"></div>
 
