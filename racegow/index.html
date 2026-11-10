@@ -248,7 +248,14 @@ python racegow_format.py "clip.mov" --start 13.7 --laps 40.07 63.27 --end 91.07
 </div>
 
 <script type="module">
-import { buildCommand, computeResults, decodeState, encodeState, parseCommand } from "./src/timing.js";
+import {
+  buildCommand,
+  computeResults,
+  decodeState,
+  encodeState,
+  filenameSourceFor,
+  parseCommand,
+} from "./src/timing.js";
 
 const vid = document.getElementById("vid");
 const scrub = document.getElementById("scrub");
@@ -269,9 +276,9 @@ const osSelect = document.getElementById("os");
 const marks = { start: null, l2: null, l3: null, end: null };
 const MARK_LABELS = { start: "Start", l2: "Lap 2", l3: "Lap 3", end: "Final" };
 
-// Filename provenance: "auto" = untouched default or adopted from a picked
-// file (safe to re-adopt on the next pick); "manual" = typed, restored from a
-// deep link, or imported from a command (never clobbered by file picks).
+// Filename provenance: "auto" = untouched default, adopted from a picked
+// file, or an empty field (safe to re-adopt on the next pick); "manual" =
+// nonempty typed, restored, or imported name (never clobbered by file picks).
 let filenameSource = "auto";
 
 const getFps = () => Number(fpsInput.value) || 30;
@@ -360,7 +367,11 @@ fileInput.addEventListener("change", () => {
 });
 
 // Typing a name is intent: it becomes "manual" and survives later file picks.
-filenameInput.addEventListener("input", () => { filenameSource = "manual"; });
+// Clearing the field reverts to "auto" so the next pick adopts the picked
+// file's name — the recovery instruction after a pick depends on that.
+filenameInput.addEventListener("input", () => {
+  filenameSource = filenameSourceFor(filenameInput.value);
+});
 
 osSelect.addEventListener("change", () => { switchInstall(); renderAll(); });
 

@@ -68,6 +68,15 @@ export function buildCommand(marks, fps, filename, os = "posix") {
   return `racegow-format ${shellQuote(name)} ${times}`;
 }
 
+// Filename provenance for the pick-vs-typed rule: a nonempty field is a
+// manual entry (typed, restored from a deep link, or imported) that survives
+// later file picks; an empty or whitespace-only field reverts to "auto" so
+// the next pick adopts the picked file's name instead of leaving the command
+// on the clip.mp4 fallback.
+export function filenameSourceFor(value) {
+  return value.trim() ? "manual" : "auto";
+}
+
 // Parse a command produced by buildCommand back into filename + marks.
 // Accepts the current single-quoted form (with \'\' escapes) and the legacy
 // double-quoted form. Number tokens must be strict decimals.
