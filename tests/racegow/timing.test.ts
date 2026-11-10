@@ -4,7 +4,12 @@ import {
   assertStringIncludes,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { buildCommand, computeResults, quantizeTime } from "../../racegow/src/timing.js";
-import { decodeState, encodeState, parseCommand } from "../../racegow/src/timing.js";
+import {
+  decodeState,
+  encodeState,
+  filenameSourceFor,
+  parseCommand,
+} from "../../racegow/src/timing.js";
 
 // Reference values verified against racegow_format.py output on a 30 fps clip.
 const MARKS = { start: 4.2, l2: 11.35, l3: 18.57, end: 25.78 };
@@ -46,6 +51,15 @@ Deno.test("buildCommand - emits racegow-format invocation with frame-grid times"
 
 Deno.test("buildCommand - falls back to a placeholder filename", () => {
   assertStringIncludes(buildCommand(MARKS, 30, ""), "'clip.mp4'");
+});
+
+Deno.test("filenameSourceFor - a nonempty field is a manual entry", () => {
+  assertEquals(filenameSourceFor("clip.mov"), "manual");
+});
+
+Deno.test("filenameSourceFor - an empty or whitespace field reverts to auto", () => {
+  assertEquals(filenameSourceFor(""), "auto");
+  assertEquals(filenameSourceFor("   "), "auto");
 });
 
 Deno.test("parseCommand - round-trips buildCommand output", () => {
