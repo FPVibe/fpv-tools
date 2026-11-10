@@ -61,8 +61,10 @@ export function encodeProfile(profile) {
     rates.yaw.expo,
     throttle.mid,
     throttle.expo,
-    throttle.limitType,
-    throttle.limitPercent,
+    // History entries may predate throttle limits; default so the token stays
+    // decodable (mirrors updateUIFromProfile's tolerant reads).
+    throttle.limitType ?? "OFF",
+    throttle.limitPercent ?? 100,
   ].join(FIELD_SEP);
 }
 
@@ -82,10 +84,22 @@ export function decodeProfile(token) {
   const ratesType = rawRatesType.toUpperCase();
   if (!RATES_TYPES.includes(ratesType)) return null;
 
-  const nums = [rc, rm, re, pc, pm, pe, yc, ym, ye, tm, te, lp].map((v) => parseInt(v, 10));
-  if (nums.some((n) => !Number.isFinite(n))) return null;
+  // Strict integer fields: parseInt would silently accept "70oops" or "1.5".
+  const rawNums = [rc, rm, re, pc, pm, pe, yc, ym, ye, tm, te, lp];
+  const strictInt = /^[+-]?\d+$/;
+  if (rawNums.some((v) => !strictInt.test(v))) return null;
+  const nums = rawNums.map((v) => parseInt(v, 10));
   const [rollC, rollM, rollE, pitchC, pitchM, pitchE, yawC, yawM, yawE, thrMid, thrExpo, thrLp] =
     nums;
+
+  let name;
+  try {
+    // Strip CR/LF: the name re-enters a single-line `# Profile:` comment in CLI
+    // exports, and raw line breaks would inject executable commands there.
+    name = decodeURIComponent(rawName).replace(/[\r\n]+/g, " ");
+  } catch {
+    return null; // malformed percent escapes
+  }
 
   const maxRateRange = ratesType === "ACTUAL" ? [200, 2000] : [0, 100];
   const axis = (center, maxRate, expo) => ({
@@ -97,7 +111,7 @@ export function decodeProfile(token) {
   const limitType = LIMIT_TYPES.includes(lt.toUpperCase()) ? lt.toUpperCase() : "OFF";
 
   return {
-    name: decodeURIComponent(rawName),
+    name,
     ratesType,
     rates: {
       roll: axis(rollC, rollM, rollE),
