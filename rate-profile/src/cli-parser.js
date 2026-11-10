@@ -123,7 +123,9 @@ export function generateCLI(profile) {
   ];
 
   if (profile.name) {
-    commands.push(`# Profile: ${profile.name}`);
+    // Keep the name on one line: a CR/LF would break out of this comment and
+    // inject executable CLI lines (e.g. names from URL hashes or imported history).
+    commands.push(`# Profile: ${profile.name.replace(/[\r\n]+/g, " ")}`);
     commands.push("");
   }
 

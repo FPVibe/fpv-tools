@@ -2,6 +2,7 @@ import { GraphRenderer, PROFILE_DASH_PATTERNS } from "./graph-renderer.js";
 import { ProfileManager } from "./profile-manager.js";
 import { generateCLI, parseAllRateProfiles, parseCLI } from "./cli-parser.js";
 import { normalizeLimitPercent, normalizeLimitType } from "./rate-calculator.js";
+import { buildShareUrl, decodeProfiles } from "./url-state.js";
 import { RotationDemo } from "./rotation-demo-ui.js";
 
 /** Maximum number of simultaneous profiles. */
@@ -48,6 +49,9 @@ class RateProfileComparison {
     // Y-axis zoom factor for overlay mode (wheel-driven; 1.0 = auto-fit)
     this.overlayYZoomFactor = 1.0;
 
+    // Populate working profiles from the URL hash when present (deep linking)
+    this.loadFromUrl();
+
     // Build dynamic DOM, then wire everything up
     this.buildProfileEditors();
     this.buildProfileVisibilityToggles();
@@ -61,6 +65,7 @@ class RateProfileComparison {
     window.addEventListener("resize", () => this.checkViewportWidth());
 
     this.initializeBulkImport();
+    this.initializeShareLinks();
     this.initializeOverlayZoom();
 
     this.updateLegend();
@@ -133,6 +138,11 @@ class RateProfileComparison {
     div.className = "profile-editor";
     div.dataset.profileIndex = i;
 
+    // BETAFLIGHT profiles store super rate (0-100) instead of deg/s in maxRate;
+    // bake the correct slider range and label into the template so every load
+    // path (URL hash, bulk import, history) builds correct controls.
+    const isBF = profile.ratesType === "BETAFLIGHT";
+
     const canRemove = i >= 2;
     div.innerHTML = `
       <div class="editor-header">
@@ -141,7 +151,11 @@ class RateProfileComparison {
           <input type="text" id="profile-${i}-name"
                  placeholder="Profile Name" class="profile-name-input">
           <button id="save-profile-${i}" class="btn btn-primary">Save</button>
-          ${canRemove ? `<button id="remove-profile-${i}" class="btn btn-danger btn-small" aria-label="Remove Profile ${label}">✕</button>` : ""}
+          ${
+      canRemove
+        ? `<button id="remove-profile-${i}" class="btn btn-danger btn-small" aria-label="Remove Profile ${label}">✕</button>`
+        : ""
+    }
         </div>
       </div>
 
@@ -154,9 +168,10 @@ class RateProfileComparison {
         </h3>
         <div class="collapsible-section-body">
           <div class="controls-grid">
-            ${["roll", "pitch", "yaw"]
-              .map(
-                (axis) => `
+            ${
+      ["roll", "pitch", "yaw"]
+        .map(
+          (axis) => `
             <div class="control-section">
               <h4 class="${axis}-heading">${axis.charAt(0).toUpperCase() + axis.slice(1)}</h4>
               <div class="control-item">
@@ -164,25 +179,36 @@ class RateProfileComparison {
                 <input type="range" id="${i}-${axis}-center"
                        min="0" max="255" step="1"
                        value="${profile.rates[axis].center}">
-                <span id="${i}-${axis}-center-value" class="value-display">${profile.rates[axis].center}</span>
+                <span id="${i}-${axis}-center-value" class="value-display">${
+            profile.rates[axis].center
+          }</span>
               </div>
               <div class="control-item">
-                <label for="${i}-${axis}-max">Max Rate (deg/s):</label>
+                <label for="${i}-${axis}-max">${
+            isBF ? "Super Rate (0-100):" : "Max Rate (deg/s):"
+          }</label>
                 <input type="range" id="${i}-${axis}-max"
-                       min="200" max="2000" step="10"
+                       min="${isBF ? "0" : "200"}" max="${isBF ? "100" : "2000"}" step="${
+            isBF ? "1" : "10"
+          }"
                        value="${profile.rates[axis].maxRate}">
-                <span id="${i}-${axis}-max-value" class="value-display">${profile.rates[axis].maxRate}</span>
+                <span id="${i}-${axis}-max-value" class="value-display">${
+            profile.rates[axis].maxRate
+          }</span>
               </div>
               <div class="control-item">
                 <label for="${i}-${axis}-expo">Expo (0-100):</label>
                 <input type="range" id="${i}-${axis}-expo"
                        min="0" max="100" step="1"
                        value="${profile.rates[axis].expo}">
-                <span id="${i}-${axis}-expo-value" class="value-display">${profile.rates[axis].expo}</span>
+                <span id="${i}-${axis}-expo-value" class="value-display">${
+            profile.rates[axis].expo
+          }</span>
               </div>
             </div>`,
-              )
-              .join("")}
+        )
+        .join("")
+    }
 
             <div class="control-section">
               <h4>Throttle</h4>
@@ -203,9 +229,15 @@ class RateProfileComparison {
               <div class="control-item">
                 <label for="${i}-throttle-limit-type">Limit Type:</label>
                 <select id="${i}-throttle-limit-type" class="select-input">
-                  <option value="OFF"${profile.throttle.limitType === "OFF" ? " selected" : ""}>Off</option>
-                  <option value="SCALE"${profile.throttle.limitType === "SCALE" ? " selected" : ""}>Scale</option>
-                  <option value="CLIP"${profile.throttle.limitType === "CLIP" ? " selected" : ""}>Clip</option>
+                  <option value="OFF"${
+      profile.throttle.limitType === "OFF" ? " selected" : ""
+    }>Off</option>
+                  <option value="SCALE"${
+      profile.throttle.limitType === "SCALE" ? " selected" : ""
+    }>Scale</option>
+                  <option value="CLIP"${
+      profile.throttle.limitType === "CLIP" ? " selected" : ""
+    }>Clip</option>
                 </select>
               </div>
               <div class="control-item">
@@ -240,6 +272,12 @@ class RateProfileComparison {
               <textarea id="export-${i}" readonly rows="4"></textarea>
               <button id="copy-btn-${i}" class="btn btn-secondary">Copy</button>
               <span id="export-status-${i}" class="status-message"></span>
+            </div>
+            <div class="share-link">
+              <h4>Share Link</h4>
+              <input type="text" id="share-${i}" readonly aria-label="Shareable URL for Profile ${label}">
+              <button id="share-copy-btn-${i}" class="btn btn-secondary">Copy</button>
+              <span id="share-status-${i}" class="status-message"></span>
             </div>
           </div>
         </div>
@@ -318,6 +356,9 @@ class RateProfileComparison {
     });
     document.getElementById(`copy-btn-${i}`).addEventListener("click", () => {
       this.copyExport(i);
+    });
+    document.getElementById(`share-copy-btn-${i}`).addEventListener("click", () => {
+      this.copyShareLink(i);
     });
     document.getElementById(`save-profile-${i}`).addEventListener("click", () => {
       this.saveProfile(i);
@@ -791,6 +832,65 @@ class RateProfileComparison {
       const el = document.getElementById(`export-${i}`);
       if (el) el.value = generateCLI(profile);
     });
+    this.updateShareUrls();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Deep linking / share URLs
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Populate working profiles from the URL hash, if present.
+   * Capped at MAX_PROFILES and padded to at least 2 so the UI's A/B
+   * assumption holds; malformed or all-invalid hashes leave defaults intact.
+   */
+  loadFromUrl() {
+    const decoded = decodeProfiles(location.hash);
+    if (decoded.length === 0) return;
+    const capped = decoded.slice(0, MAX_PROFILES);
+    while (capped.length < 2) {
+      capped.push(this.createDefaultProfile(`Profile ${PROFILE_LABELS[capped.length]}`));
+    }
+    this.profiles = capped;
+  }
+
+  /** Refresh the share-link inputs for every profile and the whole comparison. */
+  updateShareUrls() {
+    this.profiles.forEach((profile, i) => {
+      const el = document.getElementById(`share-${i}`);
+      if (el) el.value = buildShareUrl([profile]);
+    });
+    const all = document.getElementById("share-comparison-url");
+    if (all) all.value = buildShareUrl(this.profiles);
+  }
+
+  /** Wire the comparison-level share-link Copy button. */
+  initializeShareLinks() {
+    document.getElementById("share-comparison-copy-btn").addEventListener("click", () => {
+      this.copyTextToClipboard(
+        document.getElementById("share-comparison-url").value,
+        document.getElementById("share-comparison-url"),
+        document.getElementById("share-comparison-status"),
+      );
+    });
+  }
+
+  /** Copy text with a modern-API fallback and surface a status message. */
+  async copyTextToClipboard(text, inputEl, statusSpan) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      if (inputEl) {
+        inputEl.select();
+        document.execCommand("copy");
+      }
+    }
+    this.showStatus(statusSpan, "Link copied!", "success");
+  }
+
+  copyShareLink(i) {
+    const input = document.getElementById(`share-${i}`);
+    this.copyTextToClipboard(input.value, input, document.getElementById(`share-status-${i}`));
   }
 
   // ---------------------------------------------------------------------------
@@ -816,15 +916,33 @@ class RateProfileComparison {
     profileObj.ratesType = ratesType;
 
     const mapping = Object.create(null);
-    mapping.roll_rc_rate = (v) => { profileObj.rates.roll.center = parseInt(v); };
-    mapping.pitch_rc_rate = (v) => { profileObj.rates.pitch.center = parseInt(v); };
-    mapping.yaw_rc_rate = (v) => { profileObj.rates.yaw.center = parseInt(v); };
-    mapping.roll_expo = (v) => { profileObj.rates.roll.expo = parseInt(v); };
-    mapping.pitch_expo = (v) => { profileObj.rates.pitch.expo = parseInt(v); };
-    mapping.yaw_expo = (v) => { profileObj.rates.yaw.expo = parseInt(v); };
-    mapping.thr_mid = (v) => { profileObj.throttle.mid = parseInt(v); };
-    mapping.thr_expo = (v) => { profileObj.throttle.expo = parseInt(v); };
-    mapping.throttle_limit_type = (v) => { profileObj.throttle.limitType = normalizeLimitType(v); };
+    mapping.roll_rc_rate = (v) => {
+      profileObj.rates.roll.center = parseInt(v);
+    };
+    mapping.pitch_rc_rate = (v) => {
+      profileObj.rates.pitch.center = parseInt(v);
+    };
+    mapping.yaw_rc_rate = (v) => {
+      profileObj.rates.yaw.center = parseInt(v);
+    };
+    mapping.roll_expo = (v) => {
+      profileObj.rates.roll.expo = parseInt(v);
+    };
+    mapping.pitch_expo = (v) => {
+      profileObj.rates.pitch.expo = parseInt(v);
+    };
+    mapping.yaw_expo = (v) => {
+      profileObj.rates.yaw.expo = parseInt(v);
+    };
+    mapping.thr_mid = (v) => {
+      profileObj.throttle.mid = parseInt(v);
+    };
+    mapping.thr_expo = (v) => {
+      profileObj.throttle.expo = parseInt(v);
+    };
+    mapping.throttle_limit_type = (v) => {
+      profileObj.throttle.limitType = normalizeLimitType(v);
+    };
     mapping.throttle_limit_percent = (v) => {
       profileObj.throttle.limitPercent = normalizeLimitPercent(v);
     };
@@ -837,16 +955,31 @@ class RateProfileComparison {
     //   ACTUAL     → raw CLI integer is 1/10 deg/s; ×10 → internal deg/s
     //   BETAFLIGHT → value is super rate percent (0-100); srateScale = 1
     const srateScale = ratesType === "ACTUAL" ? 10 : 1;
-    mapping.roll_rate = (v) => { profileObj.rates.roll.maxRate = parseInt(v) * srateScale; };
-    mapping.pitch_rate = (v) => { profileObj.rates.pitch.maxRate = parseInt(v) * srateScale; };
-    mapping.yaw_rate = (v) => { profileObj.rates.yaw.maxRate = parseInt(v) * srateScale; };
-    mapping.roll_srate = (v) => { profileObj.rates.roll.maxRate = parseInt(v) * srateScale; };
-    mapping.pitch_srate = (v) => { profileObj.rates.pitch.maxRate = parseInt(v) * srateScale; };
-    mapping.yaw_srate = (v) => { profileObj.rates.yaw.maxRate = parseInt(v) * srateScale; };
+    mapping.roll_rate = (v) => {
+      profileObj.rates.roll.maxRate = parseInt(v) * srateScale;
+    };
+    mapping.pitch_rate = (v) => {
+      profileObj.rates.pitch.maxRate = parseInt(v) * srateScale;
+    };
+    mapping.yaw_rate = (v) => {
+      profileObj.rates.yaw.maxRate = parseInt(v) * srateScale;
+    };
+    mapping.roll_srate = (v) => {
+      profileObj.rates.roll.maxRate = parseInt(v) * srateScale;
+    };
+    mapping.pitch_srate = (v) => {
+      profileObj.rates.pitch.maxRate = parseInt(v) * srateScale;
+    };
+    mapping.yaw_srate = (v) => {
+      profileObj.rates.yaw.maxRate = parseInt(v) * srateScale;
+    };
 
     let count = 0;
     for (const [key, handler] of Object.entries(mapping)) {
-      if (settings[key] !== undefined) { handler(settings[key]); count++; }
+      if (settings[key] !== undefined) {
+        handler(settings[key]);
+        count++;
+      }
     }
     return { ratesType, count };
   }
@@ -1094,7 +1227,10 @@ class RateProfileComparison {
           <span class="history-timestamp">${new Date(profile.timestamp).toLocaleString()}</span>
         </div>
         <div class="history-item-actions">
-          ${loadButtons.replace(/data-profile-index="(\d+)"/g, (m, pi) => `${m} data-timestamp="${profile.timestamp}"`)}
+          ${
+          loadButtons.replace(/data-profile-index="(\d+)"/g, (m, pi) =>
+            `${m} data-timestamp="${profile.timestamp}"`)
+        }
           <button class="btn btn-small btn-danger delete-profile" data-timestamp="${profile.timestamp}">Delete</button>
         </div>
       </div>

@@ -196,6 +196,24 @@ Deno.test("parseCLI - when both roll_rate and roll_srate appear, first occurrenc
 // generateCLI — round-trip sanity
 // ---------------------------------------------------------------------------
 
+Deno.test("generateCLI - strips CR/LF from profile name (comment injection guard)", () => {
+  const profile = {
+    name: "Evil\ndefaults\n# save",
+    ratesType: "ACTUAL",
+    rates: {
+      roll: { center: 70, maxRate: 670, expo: 0 },
+      pitch: { center: 70, maxRate: 670, expo: 0 },
+      yaw: { center: 70, maxRate: 670, expo: 0 },
+    },
+    throttle: { mid: 50, expo: 0, limitType: "OFF", limitPercent: 100 },
+  };
+  const cli = generateCLI(profile);
+  const nameLine = cli.split("\n").find((l) => l.startsWith("# Profile:"));
+  assertEquals(/\r|\n/.test(nameLine), false);
+  // No injected command lines: the only non-comment, non-command content is the name.
+  assertEquals(cli.split("\n").some((l) => l === "defaults"), false);
+});
+
 Deno.test("generateCLI - ACTUAL profile round-trip: emits roll_srate", () => {
   const profile = {
     name: "Test",

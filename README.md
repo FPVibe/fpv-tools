@@ -25,6 +25,7 @@ Compare two Betaflight Actual Rates profiles with real-time visualization. Featu
 - **Overlay or side-by-side view** — choose how you compare
 - **Profile history** — save, name, and load profiles from browser localStorage
 - **CLI import/export** — paste Betaflight dumps to load settings; copy CLI commands back
+- **Deep linking** — every profile and the whole comparison has a shareable URL that restores the exact settings
 - **Visibility toggles** — focus on specific profiles or axes
 - **Mobile-responsive** — works on tablet and phone
 
