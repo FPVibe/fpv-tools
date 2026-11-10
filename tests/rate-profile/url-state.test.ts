@@ -106,3 +106,36 @@ Deno.test("buildShareUrl builds base + hash", () => {
     `https://fpvibe.github.io/fpv-tools/rate-profile/#${encodeProfiles([sampleProfile])}`,
   );
 });
+
+Deno.test("decodeProfile strips CR/LF from names (CLI-comment injection guard)", () => {
+  const decoded = decodeProfile(
+    "X%0Adefaults%0A:ACTUAL:70:670:0:70:670:0:70:670:0:50:0:OFF:100",
+  );
+  assertEquals(/\r|\n/.test(decoded.name), false);
+});
+
+Deno.test("decodeProfile returns null for invalid percent-escape names", () => {
+  assertStrictEquals(decodeProfile("Bad%zz:ACTUAL:70:670:0:70:670:0:70:670:0:50:0:OFF:100"), null);
+  assertStrictEquals(
+    decodeProfile("Bad%0:ACTUAL:70:670:0:70:670:0:70:670:0:50:0:OFF:100"),
+    null,
+  );
+});
+
+Deno.test("decodeProfile rejects partially numeric fields", () => {
+  assertStrictEquals(
+    decodeProfile("X:ACTUAL:70oops:670:0:70:670:0:70:670:0:50:0:OFF:100"),
+    null,
+  );
+  assertStrictEquals(
+    decodeProfile("X:ACTUAL:70:1.5:0:70:670:0:70:670:0:50:0:OFF:100"),
+    null,
+  );
+});
+
+Deno.test("encodeProfile defaults missing throttle limit fields so links restore", () => {
+  const sparse = { ...sampleProfile, throttle: { mid: 50, expo: 0 } };
+  const decoded = decodeProfile(encodeProfile(sparse));
+  assertEquals(decoded.throttle.limitType, "OFF");
+  assertEquals(decoded.throttle.limitPercent, 100);
+});
