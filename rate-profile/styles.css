@@ -690,6 +690,16 @@ body {
   border-color: var(--color-primary);
 }
 
+@media (max-width: 768px) {
+  .share-comparison {
+    flex-wrap: wrap;
+  }
+
+  .share-comparison input {
+    flex-basis: 100%;
+  }
+}
+
 /* Buttons */
 .btn {
   padding: var(--spacing-sm) var(--spacing-lg);
