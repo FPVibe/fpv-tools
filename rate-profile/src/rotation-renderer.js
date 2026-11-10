@@ -203,8 +203,9 @@ export class RotationRenderer {
    * Paint the oriented model with per-pixel depth, so parts that pass under
    * each other (arms through the body) occlude correctly.
    *
-   * Faces are rasterized supersampled and blitted as half-pixel runs, which
-   * antialiases the silhouette like the surrounding vector drawing.
+   * Faces are rasterized supersampled, resolved into an image, then composited
+   * once so the finished model does not overlap antialiased strips on the main
+   * canvas.
    * @param {number[][]} oriented - Model vertices in world coordinates.
    * @param {{heading: number, roll: number, pitch: number}} orientation
    * @param {string} color - Profile color for the arm and motor parts.
@@ -232,24 +233,30 @@ export class RotationRenderer {
       return shadeColor(base, shadeFactor(normal, LIGHT));
     });
 
-    // One fillRect per horizontal run of a face; the supersampled run
-    // boundaries land on half pixels, so each edge antialiases.
     const left = centerX - width / 2;
+    const top = centerY - tall / 2;
+    const modelCanvas = this.canvas.ownerDocument.createElement("canvas");
+    modelCanvas.width = width * ss;
+    modelCanvas.height = tall * ss;
+    const modelCtx = modelCanvas.getContext("2d");
+
+    // Draw one pixel per supersample on the offscreen canvas, then downsample
+    // and composite the finished model onto the main canvas exactly once.
     for (let row = 0; row < tall * ss; row++) {
-      const y = centerY - tall / 2 + row / ss;
       let start = -1;
       let id = 0;
       for (let col = 0; col <= width * ss; col++) {
         const current = col < width * ss ? buffer[row * width * ss + col] : 0;
         if (current === id) continue;
         if (id !== 0 && start >= 0) {
-          ctx.fillStyle = shaded[id - 1];
-          ctx.fillRect(left + start / ss, y, (col - start) / ss, 1 / ss);
+          modelCtx.fillStyle = shaded[id - 1];
+          modelCtx.fillRect(start, row, col - start, 1);
         }
         id = current;
         start = col;
       }
     }
+    ctx.drawImage(modelCanvas, 0, 0, width * ss, tall * ss, left, top, width, tall);
   }
 
   /**
@@ -284,6 +291,7 @@ export class RotationRenderer {
       const alpha = 0.05 + (i / points.length) * 0.5;
       const from = place(points[i - 1], centerX, centerY, scale);
       const to = place(points[i], centerX, centerY, scale);
+      if (from.x === to.x && from.y === to.y) continue;
       ctx.strokeStyle = this.withAlpha(color, alpha);
       ctx.beginPath();
       ctx.moveTo(from.x, from.y);
